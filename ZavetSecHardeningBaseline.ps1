@@ -343,34 +343,43 @@ if ($isRollback) {
             }
 
             # Composite entries (NET-005/006 .Req/.Enable, CRED-006 .Srv/.Cli, etc)
-            $subEntries = @($bkv.PSObject.Properties | Where-Object {
-                $_.Value -and ($_.Value.PSObject.Properties.Name -contains 'Path') })
-            if ($subEntries.Count -gt 0) {
-                foreach ($sp in $subEntries) {
-                    $entry = $sp.Value
-                    if (-not $entry.Path) { continue }
-                    if ($entry.Existed -eq $false) {
-                        Remove-ItemProperty -Path $entry.Path -Name $entry.Name -EA SilentlyContinue
+            # Must check AFTER standard single-key check to avoid false matches.
+            # Null-safe: only inspect sub-properties if $bkv itself is an object.
+            $isComposite = $false
+            if ($bkv -is [System.Management.Automation.PSCustomObject]) {
+                # Standard single Backup-RegValue: has .Existed directly on $bkv — handle first
+                if ($null -ne $bkv.PSObject.Properties['Existed']) {
+                    if ($bkv.Existed -eq $false) {
+                        Remove-ItemProperty -Path $bkv.Path -Name $bkv.Name -EA SilentlyContinue
+                        Write-Pass "Removed: ${id} ($($bkv.Name))"
                     } else {
-                        if (-not (Test-Path $entry.Path)) { $null = New-Item $entry.Path -Force }
-                        Set-ItemProperty -Path $entry.Path -Name $entry.Name -Value $entry.Value -Force -EA SilentlyContinue
+                        if (-not (Test-Path $bkv.Path)) { $null = New-Item $bkv.Path -Force }
+                        Set-ItemProperty -Path $bkv.Path -Name $bkv.Name -Value $bkv.Value -Force -EA SilentlyContinue
+                        Write-Pass "Restored: ${id} = $($bkv.Value)"
                     }
+                    $bkCount++; continue
                 }
-                Write-Pass "Restored: ${id} (composite reg)"
-                $bkCount++; continue
-            }
 
-            # Standard Backup-RegValue: { Path, Name, Value, Existed }
-            if ($null -ne $bkv.PSObject.Properties['Existed']) {
-                if ($bkv.Existed -eq $false) {
-                    Remove-ItemProperty -Path $bkv.Path -Name $bkv.Name -EA SilentlyContinue
-                    Write-Pass "Removed: ${id} ($($bkv.Name))"
-                } else {
-                    if (-not (Test-Path $bkv.Path)) { $null = New-Item $bkv.Path -Force }
-                    Set-ItemProperty -Path $bkv.Path -Name $bkv.Name -Value $bkv.Value -Force -EA SilentlyContinue
-                    Write-Pass "Restored: ${id} = $($bkv.Value)"
+                # Composite: sub-keys each containing their own Backup-RegValue object
+                $subEntries = @($bkv.PSObject.Properties | Where-Object {
+                    $_.Value -ne $null -and
+                    $_.Value -is [System.Management.Automation.PSCustomObject] -and
+                    ($_.Value.PSObject.Properties.Name -contains 'Path') })
+                if ($subEntries.Count -gt 0) {
+                    $isComposite = $true
+                    foreach ($sp in $subEntries) {
+                        $entry = $sp.Value
+                        if (-not $entry.Path) { continue }
+                        if ($entry.Existed -eq $false) {
+                            Remove-ItemProperty -Path $entry.Path -Name $entry.Name -EA SilentlyContinue
+                        } else {
+                            if (-not (Test-Path $entry.Path)) { $null = New-Item $entry.Path -Force }
+                            Set-ItemProperty -Path $entry.Path -Name $entry.Name -Value $entry.Value -Force -EA SilentlyContinue
+                        }
+                    }
+                    Write-Pass "Restored: ${id} (composite reg)"
+                    $bkCount++; continue
                 }
-                $bkCount++; continue
             }
 
             Write-Info "Skipped ${id}: unrecognized backup format"
