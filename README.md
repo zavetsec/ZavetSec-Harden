@@ -56,11 +56,28 @@ backup created before every change.
   └─────────────────────────────────────────────────────────┘
 ```
 
-**Idempotent** — run Apply twice, result is identical.
-**Non-destructive** — backup created before every change, full rollback available.
-**Locale-independent** — audit policy uses GUIDs, not subcategory names. Works on
-any Windows language.
-**PsExec-compatible** — `-NonInteractive` suppresses all prompts for remote deployment.
+**Idempotent** — run Apply twice, result is identical.  
+**Non-destructive** — JSON backup before every change, full rollback available.  
+**Locale-independent** — audit policy uses GUIDs, works on any Windows language.  
+**PsExec-compatible** — `-NonInteractive` flag for remote/automated deployment.
+
+---
+
+## `>_ why this, not that`
+
+| | ZavetSecHardeningBaseline | CIS CAT Pro | LGPO.exe | MS Security Baseline (GPO) |
+|---|---|---|---|---|
+| **Rollback** | ✅ JSON backup | ❌ | manual GPO restore | partial |
+| **HTML report** | ✅ per-check, MITRE | ✅ | ❌ | ❌ |
+| **No dependencies** | ✅ PS 5.1 only | ❌ Java required | ✅ | ❌ AD/DC required |
+| **Offline** | ✅ | ❌ | ✅ | ✅ |
+| **Audit-only mode** | ✅ | ✅ | ❌ | ❌ |
+| **Selective apply** | ✅ skip flags | ❌ | ❌ | ❌ |
+| **PsExec / automation** | ✅ `-NonInteractive` | ❌ | partial | partial |
+
+The main difference: most alternatives either change the system with no easy
+undo, require infrastructure (AD, Java, internet), or produce no report.
+This tool is built to be reversible, reportable, and runnable anywhere.
 
 ---
 
@@ -112,6 +129,23 @@ DoH policy. RDP encryption high. Print Spooler disable opt-in (PrintNightmare).
 
 ---
 
+## `>_ output — HTML report`
+
+Every run produces a dark-themed, filterable HTML report:
+
+- Compliance score gauge (0–100%)
+- Per-category breakdown table
+- Full check list — ID · severity · MITRE technique · result · apply status · remediation command
+- Filter by: FAIL only · CRITICAL · HIGH · category
+- Backup path and rollback command pre-filled at the bottom
+
+> 📸 *Screenshot coming in v1.1 — run Audit mode locally to see the report.*
+
+Reports save to `.\Reports\` via the BAT launcher, or script directory when
+running PowerShell directly (override with `-OutputPath`).
+
+---
+
 ## `>_ safe to run — read this first`
 
 > ⚠️ **Test in a non-production environment before deploying at scale.**
@@ -119,8 +153,7 @@ DoH policy. RDP encryption high. Print Spooler disable opt-in (PrintNightmare).
 **What may break:**
 
 - **SMBv1 disable** — legacy devices that only speak SMBv1 (old printers, NAS,
-  XP/2003) lose network access. Run `Get-SmbConnection` first to identify
-  dependent devices.
+  XP/2003) lose network access. Run `Get-SmbConnection` first to identify them.
 - **SMB signing required** — clients without signing support are rejected.
   Negligible in modern environments, check in legacy/mixed estates.
 - **Credential Guard** — requires UEFI + Secure Boot + VBS hardware.
@@ -134,9 +167,9 @@ DoH policy. RDP encryption high. Print Spooler disable opt-in (PrintNightmare).
 
 **Reboot required for:** Credential Guard · DEP AlwaysOn · PSv2 disable · SMBv1 client driver.
 
-**Apply runtime:** ~20–60 seconds on a modern workstation. Audit mode is faster.
-Audit policy configuration (27 subcategories via `auditpol`) accounts for most
-of the runtime on domain-joined machines.
+**Runtime:** Audit completes in ~10–30 seconds. Apply runs in ~20–60 seconds
+on a modern workstation — most of that is the 27 `auditpol` subcategory calls.
+Tested via PsExec fan-out on lab fleet without issues.
 
 ---
 
@@ -198,38 +231,27 @@ psexec \\TARGET -s -c .\ZavetSecHardeningBaseline.ps1 -Mode Apply -NonInteractiv
 
 ```
 Day 0    Audit on a representative sample.
-         Review the report. Identify legacy dependencies
-         (SMBv1 devices, NTLMv1 systems, old automation).
+         Review the HTML report. Identify legacy dependencies
+         (SMBv1 devices, NTLMv1 systems, old automation scripts).
 
 Day 1–7  Fix dependencies. Test Apply in a lab VM.
          Confirm rollback works from the generated backup.
 
 Day 7    Apply to a pilot group (5–10 machines).
-         Monitor for 48 hours. Check helpdesk tickets.
+         Monitor for 48 hours. Check application behaviour and helpdesk.
 
 Day 14+  Roll out in batches. Reboot machines that require it.
 
 Day 30   Re-run Audit across all machines.
          Compare compliance % before and after.
-         Attach report to change management record.
+         Attach the HTML report to the change management record.
 ```
-
----
-
-## `>_ vs alternatives`
-
-| Tool | Rollback | Report | Offline | PS 5.1 |
-|---|---|---|---|---|
-| **ZavetSecHardeningBaseline** | ✅ JSON backup | ✅ HTML | ✅ | ✅ |
-| CIS CAT Pro | ❌ | ✅ | ❌ requires Java | ❌ |
-| LGPO.exe | manual | ❌ | ✅ | N/A |
-| Microsoft SCT (GPO) | via GPO restore | ❌ | ✅ | partial |
 
 ---
 
 ## `>_ tested environments`
 
-| OS | Domain | Workgroup |
+| OS | Domain-joined | Workgroup |
 |---|---|---|
 | Windows 10 21H2+ | ✅ | ✅ |
 | Windows 11 22H2+ | ✅ | ✅ |
