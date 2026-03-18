@@ -301,6 +301,43 @@ files are fully open-source and can be reviewed before adding exclusions.
 
 ---
 
+## `>_ emergency reset`
+
+If hardening caused critical issues and the JSON backup is unavailable or was
+never created, use the companion script to reset all settings back to Windows
+out-of-box defaults:
+
+```powershell
+.\ZavetSecWindowsDefaults.ps1
+
+# Or silent, for remote recovery
+.\ZavetSecWindowsDefaults.ps1 -NonInteractive
+```
+
+This script does not require a backup file — it resets every setting touched
+by `ZavetSecHardeningBaseline` to documented Windows defaults: re-enables
+LLMNR, SMBv1, NBT-NS, removes LSA PPL and Credential Guard policy keys, resets
+all 27 audit subcategories to No Auditing, restores Event Log sizes, and so on.
+
+> ⚠️ A reboot is required after reset for SMBv1 client driver, PSv2,
+> DEP OptIn, and Credential Guard removal to take full effect.
+
+**Decision tree:**
+
+```
+Something broke after Apply
+        │
+        ├─ JSON backup exists?
+        │       YES → .\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath <path>
+        │                    (precise restore of your exact prior values)
+        │
+        └─ No backup / hardened by another tool?
+                YES → .\ZavetSecWindowsDefaults.ps1
+                             (full reset to clean Windows defaults)
+```
+
+---
+
 ## `>_ disclaimer`
 
 > This script modifies security-relevant system settings. Always run Audit
