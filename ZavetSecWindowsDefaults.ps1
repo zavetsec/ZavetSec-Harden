@@ -473,18 +473,23 @@ $catGroups = $global:Results | Group-Object Category
 $catRows = foreach ($g in $catGroups) {
     $gOK   = ($g.Group | Where-Object { $_.Status -eq 'OK'   }).Count
     $gFail = ($g.Group | Where-Object { $_.Status -eq 'FAIL' }).Count
-    "<tr><td>$($g.Name)</td><td style='color:#30d158'>$gOK</td><td style='color:#ff2d55'>$gFail</td></tr>"
+    "<tr><td style='font-family:JetBrains Mono,monospace;color:#a5d6ff;font-size:10px'>$($g.Name)</td><td style='font-family:JetBrains Mono,monospace;color:#00ff88'>$gOK</td><td style='font-family:JetBrains Mono,monospace;color:#ff2d55'>$gFail</td></tr>"
 }
 $catRows = $catRows -join "`n"
 
 # Result rows
 $tableRows = foreach ($r in $global:Results) {
     $sc = switch ($r.Status) {
-        'OK'   { "#30d158" }
-        'FAIL' { "#ff2d55" }
-        default{ "#ffd60a" }
+        'OK'   { '#00ff88' }
+        'FAIL' { '#ff2d55' }
+        default{ '#ffd60a' }
     }
-    "<tr><td>$($r.Category)</td><td>$($r.Name)</td><td><span style='color:$sc;font-weight:700'>$($r.Status)</span></td><td style='color:#6e6e80;font-size:11px'>$($r.Note)</td></tr>"
+    "<tr>
+      <td style='font-family:JetBrains Mono,monospace;color:#a5d6ff;font-size:10px;white-space:nowrap'>$($r.Category)</td>
+      <td style='font-size:12px'>$($r.Name)</td>
+      <td><span style='font-family:JetBrains Mono,monospace;color:$sc;font-weight:700;font-size:11px'>$($r.Status)</span></td>
+      <td style='color:#c9d1d9;font-size:11px'>$($r.Note)</td>
+    </tr>"
 }
 $tableRows = $tableRows -join "`n"
 
@@ -495,77 +500,276 @@ $html = @"
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ZavetSec Windows Defaults Reset -- $env:COMPUTERNAME</title>
+<title>ZavetSec Windows Defaults Reset // $env:COMPUTERNAME</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#07070e;color:#e2e2e8;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.6}
-header{background:linear-gradient(135deg,#07070e,#0c0c1a);border-bottom:1px solid #181828;padding:22px 40px;display:flex;align-items:center;gap:20px}
-.hi h1{font-size:20px;font-weight:600}
-.hi p{color:#6e6e80;font-size:13px;margin-top:4px}
-.main{padding:26px 40px;max-width:1400px;margin:0 auto}
-.warn{background:#1a0e00;border:2px solid #ff6b00;border-radius:10px;padding:14px 20px;margin-bottom:22px;color:#ff6b00;font-size:13px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
-.sc{background:#0e0e1a;border:1px solid #181828;border-radius:10px;padding:12px 14px}
-.sc .n{font-size:28px;font-weight:800;font-family:'Courier New',monospace}
-.sc .l{font-size:9px;color:#6e6e80;text-transform:uppercase;letter-spacing:.8px;margin-top:2px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
-.panel{background:#0e0e1a;border:1px solid #181828;border-radius:10px;padding:14px 18px}
-.panel-title{font-size:10px;font-weight:700;color:#6e6e80;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #181828}
-.st{font-size:11px;font-weight:700;color:#00d4ff;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #181828;margin-top:22px}
-table{width:100%;border-collapse:collapse;background:#0e0e1a;border-radius:10px;overflow:hidden;border:1px solid #181828;font-size:12px}
+body{
+  background:#0a0d10;
+  color:#c9d1d9;
+  font-family:'Rajdhani',sans-serif;
+  font-size:14px;
+  line-height:1.6;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+body::before{
+  content:'';
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,136,0.015) 2px,rgba(0,255,136,0.015) 4px);
+  pointer-events:none;z-index:0;
+}
+body::after{
+  content:'';
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(0,255,136,0.06) 0%,transparent 65%);
+  pointer-events:none;z-index:0;
+}
+.wrap{position:relative;z-index:1}
+header{
+  background:linear-gradient(180deg,#0d1117 0%,#0a0d10 100%);
+  border-bottom:1px solid rgba(0,255,136,0.18);
+  padding:22px 40px;
+  display:flex;align-items:center;gap:24px;
+}
+.logo-block{display:flex;flex-direction:column;gap:2px}
+.logo-name{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;font-weight:700;
+  color:#00ff88;letter-spacing:3px;text-transform:uppercase;
+}
+.logo-title{
+  font-family:'Share Tech Mono',monospace;
+  font-size:22px;font-weight:400;
+  color:#e6edf3;letter-spacing:2px;
+}
+.logo-title span{color:#00ff88}
+.logo-cursor{
+  color:#00ff88;
+  animation:cur 1s step-end infinite;
+}
+@keyframes cur{0%,100%{opacity:1}50%{opacity:0}}
+.header-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:#8b949e;margin-top:4px;
+}
+.header-right{
+  margin-left:auto;text-align:right;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;color:#8b949e;line-height:1.9;
+}
+.header-right .brand{color:#00ff88;font-weight:700;font-size:12px;letter-spacing:2px}
+.dot-anim{display:inline-flex;gap:4px;vertical-align:middle;margin-left:6px}
+.dot-anim span{
+  width:5px;height:5px;border-radius:50%;
+  background:#00ff88;
+  animation:pulse 1.4s ease-in-out infinite;
+}
+.dot-anim span:nth-child(2){animation-delay:.2s}
+.dot-anim span:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.main{padding:28px 40px;max-width:1400px;margin:0 auto}
+
+/* ── SECTION HEADER ── */
+.sec-hdr{
+  display:flex;align-items:center;gap:10px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:700;
+  color:#00ff88;text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:14px;margin-top:28px;
+  padding-bottom:7px;
+  border-bottom:1px solid rgba(0,255,136,0.15);
+}
+.sec-num{
+  background:rgba(0,255,136,0.1);
+  border:1px solid rgba(0,255,136,0.3);
+  color:#00ff88;padding:1px 7px;border-radius:3px;font-size:9px;
+}
+
+/* ── ALERT BOX ── */
+.alert-warn{
+  background:rgba(255,107,0,0.08);
+  border:1px solid rgba(255,107,0,0.4);
+  border-left:3px solid #ff6b00;
+  border-radius:6px;
+  padding:12px 18px;
+  margin-bottom:20px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:#ff6b00;
+  line-height:1.8;
+}
+.alert-warn .warn-title{
+  font-size:12px;font-weight:700;
+  letter-spacing:1px;margin-bottom:4px;
+}
+
+/* ── STAT CARDS ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.sc{
+  background:#0d1117;
+  border:1px solid #21262d;
+  border-radius:8px;
+  padding:14px 12px;
+  position:relative;overflow:hidden;
+  transition:border-color .2s;
+}
+.sc:hover{border-color:rgba(0,255,136,0.25)}
+.sc::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,136,0.25),transparent);
+}
+.sc .n{
+  font-family:'JetBrains Mono',monospace;
+  font-size:28px;font-weight:700;line-height:1.1;
+}
+.sc .l{
+  font-family:'Rajdhani',sans-serif;
+  font-size:9px;color:#8b949e;
+  text-transform:uppercase;letter-spacing:1px;
+  margin-top:4px;font-weight:600;
+}
+
+/* ── GRID + PANEL ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.panel{
+  background:#0d1117;border:1px solid #21262d;
+  border-radius:8px;padding:14px 18px;
+}
+.panel-title{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;font-weight:700;color:#8b949e;
+  text-transform:uppercase;letter-spacing:1.5px;
+  margin-bottom:10px;padding-bottom:6px;
+  border-bottom:1px solid #21262d;
+}
+
+/* ── TABLES ── */
+table{
+  width:100%;border-collapse:collapse;
+  background:#0d1117;border-radius:8px;
+  overflow:hidden;border:1px solid #21262d;font-size:12px;
+}
 .tbl{width:100%;border-collapse:collapse;font-size:11px}
-th{background:#08081a;color:#6e6e80;font-size:9px;text-transform:uppercase;letter-spacing:1px;padding:8px 10px;text-align:left;font-weight:700}
-td{padding:7px 10px;border-top:1px solid #181828;vertical-align:top}
-tr:hover td{background:#08081a}
-footer{margin-top:32px;padding:16px 40px;border-top:1px solid #181828;color:#6e6e80;font-size:11px;text-align:center}
+th{
+  background:#010409;color:#8b949e;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;text-transform:uppercase;letter-spacing:1.2px;
+  padding:9px 10px;text-align:left;font-weight:700;white-space:nowrap;
+  border-bottom:1px solid rgba(0,255,136,0.1);
+}
+td{
+  padding:8px 10px;border-top:1px solid #21262d;
+  vertical-align:top;font-family:'Rajdhani',sans-serif;
+}
+tr:hover td{background:#0a0d10;transition:background .15s}
+
+/* ── NEXT STEPS ── */
+.step{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:8px 0;border-bottom:1px solid #21262d;
+}
+.step:last-child{border-bottom:none}
+.step-num{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:700;
+  color:#00ff88;
+  background:rgba(0,255,136,0.08);
+  border:1px solid rgba(0,255,136,0.2);
+  border-radius:3px;padding:1px 6px;
+  white-space:nowrap;flex-shrink:0;margin-top:2px;
+}
+.step-text{
+  font-family:'Rajdhani',sans-serif;
+  font-size:12px;color:#c9d1d9;
+}
+.step-text .hl{
+  font-family:'JetBrains Mono',monospace;
+  color:#00ff88;font-size:10px;
+}
+
+/* ── FOOTER ── */
+footer{
+  margin-top:40px;padding:16px 40px;
+  border-top:1px solid rgba(0,255,136,0.1);
+  color:#8b949e;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;text-align:center;letter-spacing:.5px;
+}
 </style>
 </head>
 <body>
+<div class="wrap">
 <header>
-  <div class="hi">
-    <h1>ZavetSecWindowsDefaults <span style="font-size:13px;color:#6e6e80;font-weight:400">v1.1</span></h1>
-    <p>Windows Settings Reset to Defaults &nbsp;|&nbsp; Host: $env:COMPUTERNAME &nbsp;|&nbsp; Run: $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss')) &nbsp;|&nbsp; Duration: $duration</p>
+  <div class="logo-block">
+    <div class="logo-name">ZavetSec<div class="dot-anim" style="display:inline-flex"><span></span><span></span><span></span></div></div>
+    <div class="logo-title">Windows<span>Defaults</span><span class="logo-cursor">_</span> <span style="font-size:13px;color:#8b949e;font-weight:400">v1.1</span></div>
+    <div class="header-meta">Reset to Windows Defaults &nbsp;//&nbsp; Host: $env:COMPUTERNAME &nbsp;//&nbsp; $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss')) &nbsp;//&nbsp; Duration: $duration</div>
   </div>
-  <div style="margin-left:auto;text-align:right;font-size:11px;color:#6e6e80;font-family:'Courier New',monospace;line-height:1.8">
-    <div style="color:#00d4ff">ZavetSec</div>
+  <div class="header-right">
+    <div class="brand">ZavetSec</div>
     <div>github.com/zavetsec</div>
     <div>Companion to ZavetSecHardeningBaseline</div>
   </div>
 </header>
+
 <div class="main">
 
-  <div class="warn">
-    &#9888; Hardening settings have been reset to Windows defaults on this machine.<br>
-    Reboot required for: SMBv1 client driver &nbsp;&middot;&nbsp; PSv2 re-enable &nbsp;&middot;&nbsp; DEP OptIn &nbsp;&middot;&nbsp; Credential Guard removal.
+  <!-- ── SECTION 01: WARNING ── -->
+  <div class="sec-hdr"><span class="sec-num">01</span> Status</div>
+
+  <div class="alert-warn">
+    <div class="warn-title">&#9888;&nbsp; HARDENING REMOVED</div>
+    Security hardening settings have been reset to Windows out-of-box defaults on this machine.<br>
+    Reboot required to finalize: &nbsp;<strong>SMBv1 client driver</strong> &nbsp;&bull;&nbsp; <strong>PSv2 re-enable</strong> &nbsp;&bull;&nbsp; <strong>DEP OptIn</strong> &nbsp;&bull;&nbsp; <strong>Credential Guard removal</strong>
   </div>
 
+  <!-- ── SECTION 02: STATS ── -->
+  <div class="sec-hdr"><span class="sec-num">02</span> Summary</div>
+
   <div class="stats">
-    <div class="sc"><div class="n" style="color:#e2e2e8">$totalCount</div><div class="l">Total Actions</div></div>
-    <div class="sc"><div class="n" style="color:#30d158">$okCount</div><div class="l">Completed OK</div></div>
+    <div class="sc"><div class="n" style="color:#e6edf3">$totalCount</div><div class="l">Total Actions</div></div>
+    <div class="sc"><div class="n" style="color:#00ff88">$okCount</div><div class="l">Completed OK</div></div>
     <div class="sc"><div class="n" style="color:#ff2d55">$failCount</div><div class="l">Failed</div></div>
-    <div class="sc"><div class="n" style="color:#6e6e80">$skipCount</div><div class="l">Skipped</div></div>
+    <div class="sc"><div class="n" style="color:#8b949e">$skipCount</div><div class="l">Skipped</div></div>
   </div>
+
+  <!-- ── SECTION 03: BREAKDOWN + NEXT STEPS ── -->
+  <div class="sec-hdr"><span class="sec-num">03</span> Category Breakdown &amp; Next Steps</div>
 
   <div class="grid2">
     <div class="panel">
       <div class="panel-title">Results by Category</div>
       <table class="tbl">
-        <thead><tr><th>Category</th><th style="color:#30d158">OK</th><th style="color:#ff2d55">Failed</th></tr></thead>
+        <thead><tr><th>Category</th><th style="color:#00ff88">OK</th><th style="color:#ff2d55">Failed</th></tr></thead>
         <tbody>$catRows</tbody>
       </table>
     </div>
     <div class="panel">
       <div class="panel-title">Next Steps</div>
-      <div style="font-size:11px;color:#6e6e80;line-height:2.2;padding:4px 0">
-        <div>1. <span style="color:#e2e2e8">Reboot</span> the machine to complete SMBv1, PSv2 and DEP changes</div>
-        <div>2. Verify application behaviour after reboot</div>
-        <div>3. Re-run <span style="color:#00d4ff">ZavetSecHardeningBaseline -Mode Audit</span> to confirm state</div>
-        <div>4. Re-apply hardening when ready: <span style="color:#00d4ff">-Mode Apply</span></div>
+      <div style="padding:4px 0">
+        <div class="step">
+          <span class="step-num">01</span>
+          <span class="step-text"><strong>Reboot</strong> the machine to finalize SMBv1, PSv2 and DEP changes</span>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <span class="step-text">Verify application behaviour after reboot</span>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <span class="step-text">Re-run <span class="hl">ZavetSecHardeningBaseline -Mode Audit</span> to confirm state</span>
+        </div>
+        <div class="step">
+          <span class="step-num">04</span>
+          <span class="step-text">Re-apply hardening when ready: <span class="hl">-Mode Apply</span></span>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="st">All Actions ($totalCount)</div>
+  <!-- ── SECTION 04: FULL LOG ── -->
+  <div class="sec-hdr"><span class="sec-num">04</span> All Actions <span style="color:#8b949e;font-weight:400">($totalCount)</span></div>
+
   <table>
     <thead>
       <tr><th>Category</th><th>Action</th><th>Status</th><th>Note</th></tr>
@@ -575,10 +779,17 @@ footer{margin-top:32px;padding:16px 40px;border-top:1px solid #181828;color:#6e6
     </tbody>
   </table>
 
-</div>
+</div><!-- /main -->
+
 <footer>
-  <span style="color:#00d4ff;font-weight:700">ZavetSec</span> &nbsp;|&nbsp; ZavetSecWindowsDefaults v1.1 &nbsp;|&nbsp; github.com/zavetsec &nbsp;|&nbsp; Host: $env:COMPUTERNAME &nbsp;|&nbsp; $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss')) &nbsp;|&nbsp; <span style="color:#ff6b00">HARDENING REMOVED &mdash; REBOOT REQUIRED</span>
+  <span style="color:#00ff88;font-weight:700;letter-spacing:2px">ZAVETSEC</span>
+  &nbsp;&bull;&nbsp; ZavetSecWindowsDefaults v1.1
+  &nbsp;&bull;&nbsp; github.com/zavetsec
+  &nbsp;&bull;&nbsp; Host: $env:COMPUTERNAME
+  &nbsp;&bull;&nbsp; $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss'))
+  &nbsp;&bull;&nbsp; <span style="color:#ff6b00;font-weight:700">HARDENING REMOVED &mdash; REBOOT REQUIRED</span>
 </footer>
+</div><!-- /wrap -->
 </body>
 </html>
 "@

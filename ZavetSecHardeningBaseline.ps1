@@ -1365,7 +1365,7 @@ $gaugeArc  = $compliancePct   # out of 100 = percentage of full circle
 $gaugeGap  = 100 - $gaugeArc
 
 function Get-SC { param([string]$s)
-    switch ($s) { 'CRITICAL'{'#ff2d55'} 'HIGH'{'#ff6b00'} 'MEDIUM'{'#ffd60a'} 'LOW'{'#30d158'} default{'#6e6e73'} }
+    switch ($s) { 'CRITICAL'{'#ff2d55'} 'HIGH'{'#ff6b00'} 'MEDIUM'{'#b8860b'} 'LOW'{'#1a7a44'} default{'#3d444d'} }
 }
 
 $catGroups   = $global:Checks | Group-Object Category | Sort-Object Name
@@ -1376,31 +1376,31 @@ $catBars     = ($catGroups | ForEach-Object {
     $total    = [int]($pass + $fail)
     $pct      = if ($total -gt 0) { [Math]::Round($pass / $total * 100) } else { 0 }
     $barPct   = [Math]::Min($pct, 100)
-    $clr      = if ($pct -ge 90) { '#30d158' } elseif ($pct -ge 60) { '#ffd60a' } else { '#ff6b00' }
-    "<tr><td style='color:#a78bfa;font-size:11px;white-space:nowrap'>$($grp.Name)</td><td style='color:#30d158'>$pass</td><td style='color:#ff6b00'>$fail</td><td style='width:140px'><div style='background:#181828;border-radius:3px;height:6px;width:120px;overflow:hidden'><div style='background:$clr;height:6px;border-radius:3px;width:${barPct}%'></div></div></td><td style='color:$clr;font-size:10px'>$pct%</td></tr>"
+    $clr      = if ($pct -ge 90) { '#00ff88' } elseif ($pct -ge 60) { '#ffd60a' } else { '#ff6b00' }
+    "<tr><td style='font-family:JetBrains Mono,monospace;color:#a5d6ff;font-size:10px;white-space:nowrap'>$($grp.Name)</td><td style='color:#00ff88'>$pass</td><td style='color:#ff6b00'>$fail</td><td style='width:140px'><div style='background:#0d1117;border:1px solid #21262d;border-radius:3px;height:6px;width:120px;overflow:hidden'><div style='background:$clr;height:6px;border-radius:3px;width:${barPct}%;box-shadow:0 0 4px $clr'></div></div></td><td style='font-family:JetBrains Mono,monospace;color:$clr;font-size:10px'>$pct%</td></tr>"
 }) -join "`n"
 
 $tableRows = @(foreach ($c in ($global:Checks | Sort-Object @{e={if ($_.Compliant) {1} else {0}}},Severity)) {
     $sc    = Get-SC $c.Severity
-    $comClr= if ($c.Compliant) { '#30d158' } else { '#ff6b00' }
+    $comClr= if ($c.Compliant) { '#00ff88' } else { '#ff6b00' }
     $comTxt= if ($c.Compliant) { 'PASS' } else { 'FAIL' }
-    $asClr = switch ($c.ApplyStatus) { 'Applied+Verified'{'#30d158'} 'Applied-NotVerified'{'#ffd60a'} 'FAILED'{'#ff2d55'} 'AlreadyCompliant'{'#30d158'} default{'#6e6e80'} }
+    $asClr = switch ($c.ApplyStatus) { 'Applied+Verified'{'#00ff88'} 'Applied-NotVerified'{'#ffd60a'} 'FAILED'{'#ff2d55'} 'AlreadyCompliant'{'#00ff88'} default{'#8b949e'} }
     $nm    = [System.Net.WebUtility]::HtmlEncode($c.Name)
     $desc  = [System.Net.WebUtility]::HtmlEncode($c.Description)
     $ref   = [System.Net.WebUtility]::HtmlEncode($c.Reference)
     $rem   = [System.Net.WebUtility]::HtmlEncode($c.Remediation)
     $as    = [System.Net.WebUtility]::HtmlEncode($c.ApplyStatus)
     "<tr>
-      <td style='color:#6e6e80;font-size:10px;white-space:nowrap'>$($c.ID)</td>
+      <td style='font-family:JetBrains Mono,monospace;color:#8b949e;font-size:10px;white-space:nowrap'>$($c.ID)</td>
       <td><span class='badge' style='background:$sc'>$($c.Severity)</span></td>
-      <td style='color:#a78bfa;font-size:11px;white-space:nowrap'>$($c.Category)</td>
+      <td style='font-family:JetBrains Mono,monospace;color:#a5d6ff;font-size:10px;white-space:nowrap'>$($c.Category)</td>
       <td style='font-size:12px'>$nm</td>
-      <td style='color:#6e6e80;font-size:10px;max-width:220px'>$desc</td>
-      <td><span style='color:$comClr;font-weight:700;font-size:11px'>$comTxt</span></td>
-      <td style='color:$asClr;font-size:10px'>$as</td>
-      <td style='color:#6e6e80;font-size:9px;max-width:160px'>$ref</td>
-      <td style='font-family:Courier New;color:#7eb8ff;font-size:9px;max-width:220px;word-break:break-all;line-height:1.4'>$rem</td>
-      <td style='color:$(if($c.RebootRequired -eq "Yes"){"#ffd60a"}else{"#6e6e80"});font-size:10px'>$($c.RebootRequired)</td>
+      <td style='color:#c9d1d9;font-size:11px;max-width:220px'>$desc</td>
+      <td><span style='font-family:JetBrains Mono,monospace;color:$comClr;font-weight:700;font-size:11px'>$comTxt</span></td>
+      <td style='font-family:JetBrains Mono,monospace;color:$asClr;font-size:10px'>$as</td>
+      <td style='font-family:JetBrains Mono,monospace;color:#b0bec5;font-size:10px;max-width:160px'>$ref</td>
+      <td><span class='rem-code'>$rem</span></td>
+      <td style='font-family:JetBrains Mono,monospace;color:$(if($c.RebootRequired -eq "Yes"){"#ffd60a"}else{"#8b949e"});font-size:10px'>$($c.RebootRequired)</td>
     </tr>"
 })
 
@@ -1414,116 +1414,435 @@ $html = @"
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ZavetSec Hardening Baseline — $env:COMPUTERNAME</title>
+<title>ZavetSec Hardening Baseline // $env:COMPUTERNAME</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#07070e;color:#e2e2e8;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.6}
-header{background:linear-gradient(135deg,#07070e,#0c0c1a);border-bottom:1px solid #181828;padding:22px 40px;display:flex;align-items:center;gap:20px}
-.hi h1{font-size:20px;font-weight:600}
-.hi p{color:#6e6e80;font-size:13px;margin-top:4px}
-.main{padding:26px 40px;max-width:1800px;margin:0 auto}
-.rb{background:#0e0e1a;border:2px solid #282838;border-radius:12px;padding:20px 28px;margin-bottom:22px;display:flex;align-items:center;gap:28px}
-.rl{font-size:10px;color:#6e6e80;text-transform:uppercase;letter-spacing:1.2px}
-.rv{font-size:46px;font-weight:900;font-family:'Courier New',monospace;letter-spacing:-2px}
-.gauge{flex:0 0 160px;height:160px;position:relative}
-.gauge-pct{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;font-family:'Courier New',monospace;text-align:center}
-.gauge-lbl{font-size:10px;color:#6e6e80;text-align:center;margin-top:-4px}
-.stats{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:22px}
-.sc{background:#0e0e1a;border:1px solid #181828;border-radius:10px;padding:12px 14px}
-.sc .n{font-size:22px;font-weight:800;font-family:'Courier New',monospace}
-.sc .l{font-size:9px;color:#6e6e80;text-transform:uppercase;letter-spacing:.8px;margin-top:2px}
-.grid2{display:grid;grid-template-columns:3fr 2fr;gap:16px;margin-bottom:22px}
-.panel{background:#0e0e1a;border:1px solid #181828;border-radius:10px;padding:14px 18px}
-.panel-title{font-size:10px;font-weight:700;color:#6e6e80;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #181828}
-.st{font-size:11px;font-weight:700;color:#00d4ff;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #181828;margin-top:22px}
-table{width:100%;border-collapse:collapse;background:#0e0e1a;border-radius:10px;overflow:hidden;border:1px solid #181828;font-size:12px}
+body{
+  background:#0a0d10;
+  color:#c9d1d9;
+  font-family:'Rajdhani',sans-serif;
+  font-size:14px;
+  line-height:1.6;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+body::before{
+  content:'';
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,136,0.015) 2px,rgba(0,255,136,0.015) 4px);
+  pointer-events:none;
+  z-index:0;
+}
+body::after{
+  content:'';
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(0,255,136,0.07) 0%,transparent 65%);
+  pointer-events:none;
+  z-index:0;
+}
+.wrap{position:relative;z-index:1}
+header{
+  background:linear-gradient(180deg,#0d1117 0%,#0a0d10 100%);
+  border-bottom:1px solid rgba(0,255,136,0.18);
+  padding:22px 40px;
+  display:flex;
+  align-items:center;
+  gap:24px;
+}
+.logo-block{display:flex;flex-direction:column;gap:2px}
+.logo-name{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  font-weight:700;
+  color:#00ff88;
+  letter-spacing:3px;
+  text-transform:uppercase;
+}
+.logo-title{
+  font-family:'Share Tech Mono',monospace;
+  font-size:22px;
+  font-weight:400;
+  color:#e6edf3;
+  letter-spacing:2px;
+}
+.logo-title span{color:#00ff88}
+.logo-cursor{
+  color:#00ff88;
+  animation:cur 1s step-end infinite;
+}
+@keyframes cur{0%,100%{opacity:1}50%{opacity:0}}
+.header-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:#8b949e;
+  margin-top:4px;
+}
+.header-right{
+  margin-left:auto;
+  text-align:right;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  color:#8b949e;
+  line-height:1.9;
+}
+.header-right .brand{color:#00ff88;font-weight:700;font-size:12px;letter-spacing:2px}
+.dot-anim{display:inline-flex;gap:4px;vertical-align:middle;margin-left:6px}
+.dot-anim span{
+  width:5px;height:5px;border-radius:50%;
+  background:#00ff88;
+  animation:pulse 1.4s ease-in-out infinite;
+}
+.dot-anim span:nth-child(2){animation-delay:.2s}
+.dot-anim span:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.main{padding:28px 40px;max-width:1820px;margin:0 auto}
+
+/* ── SECTION HEADER ── */
+.sec-hdr{
+  display:flex;align-items:center;gap:10px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:700;
+  color:#00ff88;
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:14px;
+  margin-top:28px;
+  padding-bottom:7px;
+  border-bottom:1px solid rgba(0,255,136,0.15);
+}
+.sec-num{
+  background:rgba(0,255,136,0.12);
+  border:1px solid rgba(0,255,136,0.3);
+  color:#00ff88;
+  padding:1px 7px;
+  border-radius:3px;
+  font-size:9px;
+}
+
+/* ── SCORE PANEL ── */
+.score-panel{
+  background:#0d1117;
+  border:1px solid rgba(0,255,136,0.2);
+  border-radius:10px;
+  padding:24px 32px;
+  margin-bottom:20px;
+  display:flex;
+  align-items:center;
+  gap:32px;
+  position:relative;
+  overflow:hidden;
+}
+.score-panel::before{
+  content:'';
+  position:absolute;
+  top:-60px;left:-60px;
+  width:220px;height:220px;
+  background:radial-gradient(circle,rgba(0,255,136,0.06) 0%,transparent 70%);
+  pointer-events:none;
+}
+.gauge{flex:0 0 150px;height:150px;position:relative}
+.gauge-pct{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  font-family:'JetBrains Mono',monospace;
+  font-size:24px;font-weight:700;
+  text-align:center;
+  line-height:1.2;
+}
+.gauge-sub{font-size:9px;color:#8b949e;letter-spacing:1px;text-transform:uppercase}
+.score-info{}
+.score-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;font-weight:700;
+  color:#8b949e;
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:4px;
+}
+.score-big{
+  font-family:'JetBrains Mono',monospace;
+  font-size:52px;font-weight:700;
+  line-height:1;
+  letter-spacing:-2px;
+}
+.score-sub{color:#8b949e;font-family:'JetBrains Mono',monospace;font-size:11px;margin-top:6px}
+.sev-grid{
+  margin-left:auto;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:#8b949e;
+  line-height:2.1;
+  text-align:right;
+}
+.sev-row{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.sev-val{font-weight:700;font-size:13px;min-width:20px;text-align:right}
+
+/* ── STAT CARDS ── */
+.stats{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:20px}
+.sc{
+  background:#0d1117;
+  border:1px solid #21262d;
+  border-radius:8px;
+  padding:14px 12px;
+  position:relative;
+  overflow:hidden;
+  transition:border-color .2s;
+}
+.sc:hover{border-color:rgba(0,255,136,0.3)}
+.sc::after{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,136,0.3),transparent);
+}
+.sc .n{
+  font-family:'JetBrains Mono',monospace;
+  font-size:24px;font-weight:700;
+  line-height:1.1;
+}
+.sc .l{
+  font-family:'Rajdhani',sans-serif;
+  font-size:9px;color:#8b949e;
+  text-transform:uppercase;letter-spacing:1px;
+  margin-top:4px;font-weight:600;
+}
+
+/* ── TWO-COL GRID ── */
+.grid2{display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-bottom:20px}
+.panel{
+  background:#0d1117;
+  border:1px solid #21262d;
+  border-radius:8px;
+  padding:14px 18px;
+}
+.panel-title{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;font-weight:700;
+  color:#8b949e;
+  text-transform:uppercase;letter-spacing:1.5px;
+  margin-bottom:10px;padding-bottom:6px;
+  border-bottom:1px solid #21262d;
+}
+
+/* ── TABLES ── */
+table{
+  width:100%;border-collapse:collapse;
+  background:#0d1117;
+  border-radius:8px;overflow:hidden;
+  border:1px solid #21262d;
+  font-size:12px;
+}
 .tbl{width:100%;border-collapse:collapse;font-size:11px}
-th{background:#08081a;color:#6e6e80;font-size:9px;text-transform:uppercase;letter-spacing:1px;padding:8px 10px;text-align:left;font-weight:700;white-space:nowrap}
-td{padding:7px 10px;border-top:1px solid #181828;vertical-align:top}
-tr:hover td{background:#08081a}
-.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.5px;color:#fff;white-space:nowrap}
-.search-bar{background:#0e0e1a;border:1px solid #181828;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.search-bar input{background:#07070e;border:1px solid #282838;border-radius:6px;color:#e2e2e8;padding:6px 12px;font-size:12px;flex:1;min-width:200px;outline:none}
-.fbtn{background:#181828;border:1px solid #282838;border-radius:6px;color:#a0a0c0;padding:5px 12px;font-size:11px;cursor:pointer}
-.fbtn:hover{background:#282838}
-.mode-badge{color:#000;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:800;letter-spacing:.5px}
-footer{margin-top:32px;padding:16px 40px;border-top:1px solid #181828;color:#6e6e80;font-size:11px;text-align:center}
+th{
+  background:#010409;
+  color:#8b949e;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;text-transform:uppercase;
+  letter-spacing:1.2px;
+  padding:9px 10px;
+  text-align:left;font-weight:700;
+  white-space:nowrap;
+  border-bottom:1px solid rgba(0,255,136,0.12);
+}
+td{
+  padding:8px 10px;
+  border-top:1px solid #21262d;
+  vertical-align:top;
+  font-family:'Rajdhani',sans-serif;
+}
+tr:hover td{background:#0d1117;transition:background .15s}
+
+/* ── BADGES ── */
+.badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:3px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;font-weight:700;
+  letter-spacing:.8px;
+  color:#fff;
+  white-space:nowrap;
+}
+.mode-badge{
+  padding:2px 10px;border-radius:4px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;font-weight:700;
+  letter-spacing:1px;
+  color:#000;
+}
+
+/* ── ALERT BOX ── */
+.alert-box{
+  background:rgba(255,45,85,0.08);
+  border:1px solid rgba(255,45,85,0.35);
+  border-radius:6px;
+  padding:10px 16px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:#ff2d55;
+  margin-bottom:16px;
+}
+.alert-box.warn{
+  background:rgba(255,107,0,0.08);
+  border-color:rgba(255,107,0,0.35);
+  color:#ff6b00;
+}
+
+/* ── SEARCH BAR ── */
+.search-bar{
+  background:#0d1117;
+  border:1px solid #21262d;
+  border-radius:8px;
+  padding:10px 14px;
+  margin-bottom:12px;
+  display:flex;gap:8px;
+  align-items:center;flex-wrap:wrap;
+}
+.search-bar input{
+  background:#010409;
+  border:1px solid #30363d;
+  border-radius:5px;
+  color:#c9d1d9;
+  padding:6px 12px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  flex:1;min-width:200px;
+  outline:none;
+  transition:border-color .2s;
+}
+.search-bar input:focus{border-color:rgba(0,255,136,0.4)}
+.fbtn{
+  background:#161b22;
+  border:1px solid #30363d;
+  border-radius:5px;
+  color:#8b949e;
+  padding:5px 12px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  font-weight:700;
+  cursor:pointer;
+  letter-spacing:.5px;
+  transition:all .15s;
+}
+.fbtn:hover{background:#21262d;color:#00ff88;border-color:rgba(0,255,136,0.3)}
+.fbtn.active{background:rgba(0,255,136,0.1);border-color:rgba(0,255,136,0.4);color:#00ff88}
+
+/* ── REMEDIATION CODE ── */
+.rem-code{
+  font-family:'JetBrains Mono',monospace;
+  color:#7eb8ff;
+  font-size:9px;
+  max-width:220px;
+  word-break:break-all;
+  line-height:1.5;
+  background:rgba(126,184,255,0.05);
+  border-radius:3px;
+  padding:2px 4px;
+}
+
+/* ── FOOTER ── */
+footer{
+  margin-top:40px;
+  padding:16px 40px;
+  border-top:1px solid rgba(0,255,136,0.1);
+  color:#8b949e;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  text-align:center;
+  letter-spacing:.5px;
+}
 </style>
 </head>
 <body>
+<div class="wrap">
 <header>
-  <div class="hi">
-    <h1>ZavetSecHardeningBaseline <span style="font-size:13px;color:#6e6e80;font-weight:400">v1.0</span></h1>
-    <p>Windows Security Hardening Baseline &nbsp;|&nbsp; Host: $env:COMPUTERNAME &nbsp;|&nbsp; Mode: <span class="mode-badge" style="background:$modeColor">$Mode</span> &nbsp;|&nbsp; Run: $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss')) &nbsp;|&nbsp; Duration: $duration &nbsp;|&nbsp; Checks: $totalChecks</p>
+  <div class="logo-block">
+    <div class="logo-name">ZavetSec<div class="dot-anim" style="display:inline-flex"><span></span><span></span><span></span></div></div>
+    <div class="logo-title">Hardening<span>Baseline</span><span class="logo-cursor">_</span> <span style="font-size:13px;color:#8b949e;font-weight:400">v1.1</span></div>
+    <div class="header-meta">Windows Security Hardening &nbsp;//&nbsp; Host: $env:COMPUTERNAME &nbsp;//&nbsp; Mode: <span class="mode-badge" style="background:$modeColor">$Mode</span> &nbsp;//&nbsp; $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss')) &nbsp;//&nbsp; Duration: $duration &nbsp;//&nbsp; Checks: $totalChecks</div>
   </div>
-  <div style="margin-left:auto;text-align:right;font-size:11px;color:#6e6e80;font-family:'Courier New',monospace;line-height:1.8">
-    <div style="color:#00d4ff">ZavetSec</div>
+  <div class="header-right">
+    <div class="brand">ZavetSec</div>
     <div>github.com/zavetsec</div>
-    <div>CIS | DISA STIG | MS Baseline</div>
+    <div>CIS Benchmark | DISA STIG | MS Baseline</div>
   </div>
 </header>
+
 <div class="main">
 
-  <div class="rb" style="border-color:$riskColor">
+  <!-- ── SCORE ── -->
+  <div class="sec-hdr"><span class="sec-num">01</span> Compliance Overview</div>
+
+  <div class="score-panel" style="border-color:rgba($(if($compliancePct -ge 90){'0,255,136'}elseif($compliancePct -ge 60){'255,214,10'}else{'255,45,85'}),0.3)">
     <div class="gauge">
-      <svg viewBox="0 0 36 36" style="width:160px;height:160px;transform:rotate(-90deg)">
-        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none" stroke="#1e1e2e" stroke-width="3.5"/>
-        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none" stroke-width="3.5"
-          style="stroke:$riskColor;stroke-dasharray:$gaugeArc $gaugeGap;stroke-linecap:round"/>
+      <svg viewBox="0 0 36 36" style="width:150px;height:150px;transform:rotate(-90deg)">
+        <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#1c2128" stroke-width="3"/>
+        <circle cx="18" cy="18" r="15.9155" fill="none" stroke-width="3"
+          style="stroke:$riskColor;stroke-dasharray:$gaugeArc $gaugeGap;stroke-linecap:round;filter:drop-shadow(0 0 4px $riskColor)"/>
       </svg>
-      <div class="gauge-pct" style="color:$riskColor">$compliancePct%<div class="gauge-lbl">compliant</div></div>
+      <div class="gauge-pct" style="color:$riskColor">$compliancePct%<br><span class="gauge-sub">compliant</span></div>
     </div>
-    <div>
-      <div class="rl">Compliance Score</div>
-      <div class="rv" style="color:$riskColor">$compliancePct<span style="font-size:20px;color:#6e6e80">%</span></div>
-      <div style="color:#6e6e80;font-size:11px;margin-top:6px">$compliantCount of $totalChecks checks passed | Mode: $Mode</div>
+    <div class="score-info">
+      <div class="score-label">Compliance Score</div>
+      <div class="score-big" style="color:$riskColor">$compliancePct<span style="font-size:24px;color:#8b949e">%</span></div>
+      <div class="score-sub">$compliantCount of $totalChecks checks passed &nbsp;|&nbsp; Mode: $Mode</div>
     </div>
     <div style="flex:1"></div>
-    <div style="text-align:right;color:#6e6e80;font-size:12px;font-family:'Courier New',monospace;line-height:2">
-      CRITICAL fail: <span style="color:#ff2d55;font-weight:700">$critFail</span><br>
-      HIGH fail:     <span style="color:#ff6b00;font-weight:700">$highFail</span><br>
-      MEDIUM fail:   <span style="color:#ffd60a;font-weight:700">$medFail</span><br>
-      LOW fail:      <span style="color:#30d158;font-weight:700">$lowFail</span>
+    <div class="sev-grid">
+      <div class="sev-row"><span>CRITICAL</span><span class="sev-val" style="color:#ff2d55">$critFail</span></div>
+      <div class="sev-row"><span>HIGH</span><span class="sev-val" style="color:#ff6b00">$highFail</span></div>
+      <div class="sev-row"><span>MEDIUM</span><span class="sev-val" style="color:#ffd60a">$medFail</span></div>
+      <div class="sev-row"><span>LOW</span><span class="sev-val" style="color:#00ff88">$lowFail</span></div>
     </div>
   </div>
 
+  <!-- ── STAT CARDS ── -->
   <div class="stats">
-    <div class="sc"><div class="n" style="color:#30d158">$compliantCount</div><div class="l">Passed</div></div>
+    <div class="sc"><div class="n" style="color:#00ff88">$compliantCount</div><div class="l">Passed</div></div>
     <div class="sc"><div class="n" style="color:#ff6b00">$nonCompliantCount</div><div class="l">Failed</div></div>
-    <div class="sc"><div class="n" style="color:#ff2d55">$critFail</div><div class="l">Critical Fail</div></div>
-    <div class="sc"><div class="n" style="color:#ff6b00">$highFail</div><div class="l">High Fail</div></div>
-    <div class="sc"><div class="n" style="color:#ffd60a">$medFail</div><div class="l">Medium Fail</div></div>
-    <div class="sc"><div class="n" style="color:#30d158">$lowFail</div><div class="l">Low Fail</div></div>
-    <div class="sc"><div class="n" style="color:#00d4ff">$($global:Applied)</div><div class="l">Applied</div></div>
-    <div class="sc"><div class="n" style="color:#6e6e80">$($global:Skipped)</div><div class="l">Already OK</div></div>
+    <div class="sc"><div class="n" style="color:#ff2d55">$critFail</div><div class="l">Critical</div></div>
+    <div class="sc"><div class="n" style="color:#ff6b00">$highFail</div><div class="l">High</div></div>
+    <div class="sc"><div class="n" style="color:#ffd60a">$medFail</div><div class="l">Medium</div></div>
+    <div class="sc"><div class="n" style="color:#00ff88">$lowFail</div><div class="l">Low</div></div>
+    <div class="sc"><div class="n" style="color:#58a6ff">$($global:Applied)</div><div class="l">Applied</div></div>
+    <div class="sc"><div class="n" style="color:#8b949e">$($global:Skipped)</div><div class="l">Already OK</div></div>
   </div>
 
+  <!-- ── CATEGORY TABLE + COVERAGE ── -->
+  <div class="sec-hdr"><span class="sec-num">02</span> Category Breakdown</div>
   <div class="grid2">
     <div class="panel">
       <div class="panel-title">Compliance by Category</div>
       <table class="tbl">
-        <thead><tr><th>Category</th><th style="color:#30d158">Pass</th><th style="color:#ff6b00">Fail</th><th>Score</th><th>%</th></tr></thead>
+        <thead><tr><th>Category</th><th style="color:#00ff88">Pass</th><th style="color:#ff6b00">Fail</th><th>Score</th><th>%</th></tr></thead>
         <tbody>$catBars</tbody>
       </table>
     </div>
     <div class="panel">
-      <div class="panel-title">Coverage</div>
-      <div style="font-size:11px;color:#6e6e80;line-height:2.2;padding:4px 0">
-        <div>Network Hardening: <span style="color:$(if($SkipNetworkHardening){'#ff6b00'}else{'#30d158'})">$(if($SkipNetworkHardening){'Skipped'}else{'Included'})</span></div>
-        <div>Credential Protection: <span style="color:$(if($SkipCredentialProtection){'#ff6b00'}else{'#30d158'})">$(if($SkipCredentialProtection){'Skipped'}else{'Included'})</span></div>
-        <div>PowerShell Hardening: <span style="color:$(if($SkipPowerShell){'#ff6b00'}else{'#30d158'})">$(if($SkipPowerShell){'Skipped'}else{'Included'})</span></div>
-        <div>Audit Policy: <span style="color:$(if($SkipAuditPolicy){'#ff6b00'}else{'#30d158'})">$(if($SkipAuditPolicy){'Skipped'}else{'Included'})</span></div>
-        <div>System Hardening: <span style="color:#30d158">Included</span></div>
-        <div>Print Spooler Disable: <span style="color:$(if($EnablePrintSpoolerDisable){'#30d158'}else{'#6e6e80'})">$(if($EnablePrintSpoolerDisable){'Included'}else{'Opt-in (-EnablePrintSpoolerDisable)'})</span></div>
-        <div style="margin-top:10px;color:#6e6e80;font-size:10px">Backup: $(if(Test-Path $BackupPath){"$BackupPath"}else{'N/A'})</div>
-        <div style="color:#6e6e80;font-size:10px">Rollback: .\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath "..."</div>
+      <div class="panel-title">Coverage &amp; Modules</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#8b949e;line-height:2.4;padding:4px 0">
+        <div>Network Hardening <span style="color:$(if($SkipNetworkHardening){'#ff6b00'}else{'#00ff88'})">$(if($SkipNetworkHardening){'[SKIPPED]'}else{'[OK]'})</span></div>
+        <div>Credential Protection <span style="color:$(if($SkipCredentialProtection){'#ff6b00'}else{'#00ff88'})">$(if($SkipCredentialProtection){'[SKIPPED]'}else{'[OK]'})</span></div>
+        <div>PowerShell Hardening <span style="color:$(if($SkipPowerShell){'#ff6b00'}else{'#00ff88'})">$(if($SkipPowerShell){'[SKIPPED]'}else{'[OK]'})</span></div>
+        <div>Audit Policy <span style="color:$(if($SkipAuditPolicy){'#ff6b00'}else{'#00ff88'})">$(if($SkipAuditPolicy){'[SKIPPED]'}else{'[OK]'})</span></div>
+        <div>System Hardening <span style="color:#00ff88">[OK]</span></div>
+        <div>Print Spooler Disable <span style="color:$(if($EnablePrintSpoolerDisable){'#00ff88'}else{'#8b949e'})">$(if($EnablePrintSpoolerDisable){'[ENABLED]'}else{'[OPT-IN]'})</span></div>
+        <div style="margin-top:10px;font-size:9px;color:#8b949e">Backup: $(if(Test-Path $BackupPath){"$BackupPath"}else{'N/A'})</div>
+        <div style="font-size:9px;color:#8b949e">Rollback: .\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath &quot;...&quot;</div>
       </div>
     </div>
   </div>
 
-  <div class="st">All Checks ($totalChecks)</div>
+  <!-- ── CHECKS TABLE ── -->
+  <div class="sec-hdr"><span class="sec-num">03</span> All Checks <span style="color:#8b949e;font-weight:400">($totalChecks)</span></div>
+
+  $(if ($critFail -gt 0) { '<div class="alert-box">&#9888; ' + $critFail + ' CRITICAL check(s) failed &mdash; immediate remediation required</div>' })
+  $(if ($highFail -gt 0) { '<div class="alert-box warn">&#9888; ' + $highFail + ' HIGH check(s) failed &mdash; review and remediate soon</div>' })
+
   <div class="search-bar">
     <input type="text" id="sb" placeholder="Filter by ID, name, category, severity..." oninput="ft()">
     <button class="fbtn" id="btn-fail" onclick="sf('FAIL')">FAIL only</button>
@@ -1535,6 +1854,7 @@ footer{margin-top:32px;padding:16px 40px;border-top:1px solid #181828;color:#6e6
     <button class="fbtn" onclick="sf('credentials')">Credentials</button>
     <button class="fbtn" onclick="sf('')">Clear</button>
   </div>
+
   <table id="ft">
     <thead>
       <tr>
@@ -1546,7 +1866,20 @@ footer{margin-top:32px;padding:16px 40px;border-top:1px solid #181828;color:#6e6
       $($tableRows -join "`n")
     </tbody>
   </table>
-</div>
+
+</div><!-- /main -->
+
+<footer>
+  <span style="color:#00ff88;font-weight:700;letter-spacing:2px">ZAVETSEC</span>
+  &nbsp;&bull;&nbsp; ZavetSecHardeningBaseline v1.1
+  &nbsp;&bull;&nbsp; github.com/zavetsec
+  &nbsp;&bull;&nbsp; Host: $env:COMPUTERNAME
+  &nbsp;&bull;&nbsp; Mode: $Mode
+  &nbsp;&bull;&nbsp; $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss'))
+  &nbsp;&bull;&nbsp; <span style="color:#ff2d55;font-weight:700">CONFIDENTIAL &mdash; SOC/DFIR USE ONLY</span>
+</footer>
+</div><!-- /wrap -->
+
 <script>
 var failOnly = false;
 function ft() {
@@ -1563,23 +1896,19 @@ function ft() {
   }
 }
 function sf(v) {
+  var btns = document.querySelectorAll('.fbtn');
+  for (var b = 0; b < btns.length; b++) { btns[b].classList.remove('active'); }
   if (v === 'FAIL') {
     failOnly = !failOnly;
     document.getElementById('sb').value = '';
-    document.getElementById('btn-fail').style.background = failOnly ? '#ff6b00' : '';
-    document.getElementById('btn-fail').style.color = failOnly ? '#000' : '';
+    if (failOnly) { document.getElementById('btn-fail').classList.add('active'); }
   } else {
     failOnly = false;
-    document.getElementById('btn-fail').style.background = '';
-    document.getElementById('btn-fail').style.color = '';
     document.getElementById('sb').value = v;
   }
   ft();
 }
 </script>
-<footer>
-  <span style="color:#00d4ff;font-weight:700">ZavetSec</span> &nbsp;|&nbsp; ZavetSecHardeningBaseline v1.1 &nbsp;|&nbsp; github.com/zavetsec &nbsp;|&nbsp; Host: $env:COMPUTERNAME &nbsp;|&nbsp; Mode: $Mode &nbsp;|&nbsp; $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss')) &nbsp;|&nbsp; <span style="color:#ff2d55">CONFIDENTIAL &mdash; SOC/DFIR USE ONLY</span>
-</footer>
 </body>
 </html>
 "@
