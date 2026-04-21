@@ -13,10 +13,10 @@
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20%7C%20Server%202016--2022-0078d4?style=flat-square&logo=windows)](https://microsoft.com/windows)
 [![CIS](https://img.shields.io/badge/Standard-CIS%20%7C%20DISA%20STIG%20%7C%20MS%20Baseline-00b4d8?style=flat-square)](https://cisecurity.org)
 [![License](https://img.shields.io/badge/License-MIT-30d158?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0-ff6b00?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/Version-1.1-ff6b00?style=flat-square)](#)
 [![Stars](https://img.shields.io/github/stars/zavetsec/ZavetSecHardeningBaseline?style=flat-square)](https://github.com/zavetsec/ZavetSecHardeningBaseline/stargazers)
 
-*One script. 60+ checks. Three modes. Zero bloat.*
+*One script. 60 checks. Three modes. Zero bloat.*
 
 </div>
 
@@ -80,7 +80,7 @@ backup created before every change.
 | Pre-auth RDP exploits | T1021.001 | NLA enforced · encryption level high |
 | USB payload delivery | T1091 | AutoRun / AutoPlay disabled on all drive types |
 | PowerShell abuse | T1059.001 | Script Block + Module logging · PSv2 disabled |
-| Logging blind spot | — | Security log 1 GB · 27 audit subcategories configured |
+| Logging blind spot | — | Security log 1 GB · 29 audit subcategory checks configured |
 
 ---
 
@@ -103,16 +103,17 @@ to `C:\ProgramData\PSTranscripts`. PSv2 engine disabled — closes the
 `PS-001 — PS-005`
 
 ### 📋 Audit policy
-27 subcategories via `auditpol` with GUID references. Covers Logon/Logoff,
-Kerberos (TGT + TGS), Process Creation, Account Management, Object Access,
-Privilege Use, Policy Change, DPAPI, Scheduled Tasks, Removable Storage,
-Firewall events. `AUD-001 — AUD-027`
+27 subcategories via `auditpol` with GUID references, plus command-line
+capture in 4688 and advanced audit policy override (SCENoApplyLegacyAuditPolicy).
+Covers Logon/Logoff, Kerberos (TGT + TGS), Process Creation, Account Management,
+Object Access, Privilege Use, Policy Change, DPAPI, Scheduled Tasks, Removable
+Storage, Firewall events. `AUD-001 — AUD-029`
 
 ### 🖥️ System hardening
 UAC full enforcement with secure desktop. AutoRun/AutoPlay disabled. Firewall
-on all profiles. RDP NLA required. DEP AlwaysOn. Security log 1 GB / overwrite.
-DoH policy. RDP encryption high. Print Spooler disable opt-in (PrintNightmare).
-`SYS-001 — SYS-010`
+on all profiles. RDP NLA required. DEP AlwaysOn. Security log 1 GB / overwrite,
+System and Application logs 256 MB / overwrite. DoH policy. RDP encryption high.
+Print Spooler disable opt-in (PrintNightmare). `SYS-001 — SYS-010`
 
 ---
 
@@ -169,7 +170,8 @@ Right-click `Run-Hardening.bat` → **Run as administrator.**
    [4]  EXIT
 ```
 
-Creates `Reports\` automatically. ROLLBACK lists backups by number — no path entry required.
+All output (HTML reports and JSON backups) saved to the same folder as the scripts.
+ROLLBACK lists available backups by number — no path entry required.
 
 ### Option B — PowerShell directly
 
@@ -183,9 +185,12 @@ Creates `Reports\` automatically. ROLLBACK lists backups by number — no path e
 # Apply — no prompts (PsExec / automation)
 .\ZavetSecHardeningBaseline.ps1 -Mode Apply -NonInteractive
 
-# Rollback
+# Rollback — interactive: lists available backups, asks which to use
+.\ZavetSecHardeningBaseline.ps1 -Mode Rollback
+
+# Rollback — explicit backup path (e.g. from automation)
 .\ZavetSecHardeningBaseline.ps1 -Mode Rollback `
-    -BackupPath .\Reports\HardeningBackup_20260318_120000.json
+    -BackupPath .\HardeningBackup_20260318_120000.json
 
 # Skip sections
 .\ZavetSecHardeningBaseline.ps1 -Mode Apply -SkipAuditPolicy
@@ -264,8 +269,8 @@ companion script to reset all settings back to Windows out-of-box defaults:
 Something broke after Apply
         │
         ├─ JSON backup exists?
-        │       YES → .\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath <path>
-        │                    (precise restore of your exact prior values)
+        │       YES → .\ZavetSecHardeningBaseline.ps1 -Mode Rollback
+        │                    (interactive selection or -BackupPath for automation)
         │
         └─ No backup / hardened by another tool?
                 YES → .\ZavetSecWindowsDefaults.ps1
@@ -292,8 +297,8 @@ Something broke after Apply
 | Parameter | Default | Description |
 |---|---|---|
 | `-Mode Audit\|Apply\|Rollback` | `Audit` | Operation mode |
-| `-BackupPath` | script dir | JSON backup path |
-| `-OutputPath` | script dir | HTML report path |
+| `-BackupPath` | `<ScriptDir>` | JSON backup path (interactive selection in Rollback if omitted) |
+| `-OutputPath` | `<ScriptDir>` | HTML report path |
 | `-SkipAuditPolicy` | — | Skip audit policy section |
 | `-SkipNetworkHardening` | — | Skip network section |
 | `-SkipPowerShell` | — | Skip PowerShell section |
@@ -332,7 +337,7 @@ is independent — use any one standalone, or chain them as a pipeline.
 |---|---|
 | **[Invoke-ZavetSecTriage](https://github.com/zavetsec/Invoke-ZavetSecTriage)** | Live artifact collection — 18 modules, MITRE-tagged findings, HTML report |
 | **[Invoke-MBHashCheck](https://github.com/zavetsec/Invoke-MBHashCheck)** | Bulk hash triage — MalwareBazaar + ThreatFox C2 enrichment + GeoIP |
-| **ZavetSecHardeningBaseline** | 60+ hardening checks — CIS/STIG aligned, JSON rollback, compliance report |
+| **ZavetSecHardeningBaseline** | 60 checks — CIS/STIG aligned, JSON rollback, compliance report |
 
 All three: PS 5.1, zero dependencies, self-contained HTML reports, PsExec-compatible.
 
