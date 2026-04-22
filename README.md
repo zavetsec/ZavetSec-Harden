@@ -1,4 +1,4 @@
-# ZavetSec Hardening Baseline
+# ZavetSec-Harden
 
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-0078d4?style=flat-square&logo=powershell)](https://docs.microsoft.com/powershell)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20%7C%20Server%202016--2022-0078d4?style=flat-square&logo=windows)](https://microsoft.com/windows)
@@ -34,7 +34,7 @@ LLMNR broadcasting credentials to anyone who asks, WDigest storing plaintext
 passwords in memory, SMBv1 waiting for EternalBlue, audit logs sized at 20 MB
 that fill in hours. These are not misconfigurations — **they are shipped this way, on every fresh install.**
 
-`ZavetSecHardeningBaseline` fixes this. It audits your current state, applies
+`ZavetSec-Harden` fixes this. It audits your current state, applies
 a hardened baseline aligned to **CIS Benchmark**, **DISA STIG**, and
 **Microsoft Security Baseline**, and generates an HTML report you can hand to
 a customer or attach to a ticket. If something breaks, rollback from the JSON
@@ -55,7 +55,7 @@ backup created before every change.
 ## `>_ 10-second start`
 
 ```powershell
-.\ZavetSecHardeningBaseline.ps1
+.\ZavetSec-Harden.ps1
 ```
 ```
   [1]  Audit     - Check current state, no changes made
@@ -203,7 +203,7 @@ Hand it to a customer. Attach it to a change management record. Run before/after
 
 ## `>_ why this, not that`
 
-| | ZavetSecHardeningBaseline | CIS CAT Pro | LGPO.exe | MS Security Baseline (GPO) |
+| | ZavetSec-Harden | CIS CAT Pro | LGPO.exe | MS Security Baseline (GPO) |
 |---|---|---|---|---|
 | **Rollback** | ✅ JSON backup | ❌ | manual GPO restore | partial |
 | **HTML report** | ✅ per-check, MITRE | ✅ | ❌ | ❌ |
@@ -228,7 +228,7 @@ Designed for standalone and offline environments — no infrastructure required.
 ### Option A — interactive (recommended)
 
 ```powershell
-.\ZavetSecHardeningBaseline.ps1
+.\ZavetSec-Harden.ps1
 ```
 
 The script walks you through mode selection, then device profile selection for Apply,
@@ -264,48 +264,43 @@ loops — nothing exits unexpectedly.
     [0]   Back
 ```
 
-### Option B — BAT launcher
-
-Right-click `Run-Hardening.bat` → **Run as administrator.**
-Menu-driven launcher with Audit / Apply / Rollback. All output saved to the script folder.
-
-### Option C — direct flags
+### Option B — direct flags
 
 ```powershell
 # Audit -- zero changes
-.\ZavetSecHardeningBaseline.ps1 -Mode Audit
+.\ZavetSec-Harden.ps1 -Mode Audit
 
 # Apply with device profile (no interactive menus)
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -DeviceProfile Workstation
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -DeviceProfile DomainController
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -DeviceProfile All
+.\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile Workstation
+.\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile DomainController
+.\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile All
 
 # Apply -- fully automated, no prompts
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -DeviceProfile Workstation -NonInteractive
+.\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile Workstation -NonInteractive
 
 # Rollback -- interactive backup selection
-.\ZavetSecHardeningBaseline.ps1 -Mode Rollback
+.\ZavetSec-Harden.ps1 -Mode Rollback
 
 # Rollback -- explicit backup path (automation)
-.\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath .\HardeningBackup_20260422_143012.json
+.\ZavetSec-Harden.ps1 -Mode Rollback -BackupPath .\HardeningBackup_20260422_143012.json
 
 # Reset to Windows defaults (when backup is unavailable)
-.\ZavetSecHardeningBaseline.ps1 -Mode Defaults
+.\ZavetSec-Harden.ps1 -Mode Defaults
 
 # Skip individual sections manually (Custom profile)
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -SkipAuditPolicy
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -SkipNetworkHardening
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -SkipCredentialProtection
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -SkipPowerShell
+.\ZavetSec-Harden.ps1 -Mode Apply -SkipAuditPolicy
+.\ZavetSec-Harden.ps1 -Mode Apply -SkipNetworkHardening
+.\ZavetSec-Harden.ps1 -Mode Apply -SkipCredentialProtection
+.\ZavetSec-Harden.ps1 -Mode Apply -SkipPowerShell
 
 # PrintNightmare mitigation (opt-in)
-.\ZavetSecHardeningBaseline.ps1 -Mode Apply -EnablePrintSpoolerDisable
+.\ZavetSec-Harden.ps1 -Mode Apply -EnablePrintSpoolerDisable
 ```
 
-### Option D — mass deployment via PsExec
+### Option C — mass deployment via PsExec
 
 ```powershell
-psexec \\TARGET -s -c .\ZavetSecHardeningBaseline.ps1 -Mode Apply -DeviceProfile Workstation -NonInteractive
+psexec \\TARGET -s -c .\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile Workstation -NonInteractive
 ```
 
 ---
@@ -386,11 +381,11 @@ Two recovery paths are available — from the interactive menu `[4] Defaults` or
 
 ```powershell
 # Path 1 -- precise restore from backup (preferred)
-.\ZavetSecHardeningBaseline.ps1 -Mode Rollback
+.\ZavetSec-Harden.ps1 -Mode Rollback
 # Interactive list of available backups shown automatically
 
 # Path 2 -- full reset to Windows out-of-box defaults (when backup unavailable)
-.\ZavetSecHardeningBaseline.ps1 -Mode Defaults
+.\ZavetSec-Harden.ps1 -Mode Defaults
 # or directly:
 .\ZavetSecWindowsDefaults.ps1 -NonInteractive
 ```
@@ -401,11 +396,11 @@ Two recovery paths are available — from the interactive menu `[4] Defaults` or
 Something broke after Apply
         |
         +-- JSON backup exists?
-        |       YES -> .\ZavetSecHardeningBaseline.ps1 -Mode Rollback
+        |       YES -> .\ZavetSec-Harden.ps1 -Mode Rollback
         |                    (precise restore of your exact prior values)
         |
         +-- No backup / hardened by another tool?
-                YES -> .\ZavetSecHardeningBaseline.ps1 -Mode Defaults
+                YES -> .\ZavetSec-Harden.ps1 -Mode Defaults
                              (full reset to clean Windows out-of-box state)
 ```
 
@@ -444,22 +439,21 @@ Something broke after Apply
 ## `>_ antivirus exclusions`
 
 Some EDR/AV solutions may flag the script due to its behaviour — registry changes,
-service control, `auditpol.exe` calls, and `.bat` + `.ps1` execution in sequence.
+service control, `auditpol.exe` calls, and `.ps1` execution.
 This is expected and does not indicate malicious intent.
 
-If your AV triggers on it, review the source code (both files are fully open-source)
-and consider adding exclusions:
+If your AV triggers on it, review the source code (fully open-source)
+and consider adding an exclusion for:
 
 ```
-ZavetSecHardeningBaseline.ps1
-Run-Hardening.bat
+ZavetSec-Harden.ps1
 ```
 
 ---
 
 ## `>_ part of the ZavetSec DFIR toolkit`
 
-`ZavetSecHardeningBaseline` is one module in the **ZavetSec** open-source SOC/DFIR
+`ZavetSec-Harden` is one module in the **ZavetSec** open-source SOC/DFIR
 toolkit — a collection of standalone PowerShell tools built for practitioners who
 work in real environments: mixed OS fleets, no internet, constrained budgets, and
 incidents that don't wait.
