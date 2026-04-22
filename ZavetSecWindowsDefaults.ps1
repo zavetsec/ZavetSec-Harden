@@ -3,11 +3,11 @@
 .SYNOPSIS
     ZavetSecWindowsDefaults - Reset Windows security settings to clean defaults.
 .DESCRIPTION
-    Resets all settings touched by ZavetSecHardeningBaseline back to
+    Resets all settings touched by ZavetSec-Harden back to
     Windows out-of-box defaults. Does NOT require a backup file.
 
     Use this when:
-      - The JSON backup from ZavetSecHardeningBaseline is lost
+      - The JSON backup from ZavetSec-Harden is lost
       - The machine was hardened by a third-party tool (not this script)
       - You need a clean baseline before re-applying hardening
 
@@ -57,8 +57,8 @@
     Author   : ZavetSec
     License  : MIT
     ================================================================
-    Companion to ZavetSecHardeningBaseline.ps1
-    Use ZavetSecHardeningBaseline -Mode Rollback when backup exists.
+    Companion to ZavetSec-Harden.ps1
+    Use ZavetSec-Harden -Mode Rollback when backup exists.
     Use THIS script when backup is lost or machine was hardened externally.
     ================================================================
     WARNING : This script removes hardening. Run only when intentional.
@@ -191,7 +191,7 @@ if (-not $isAdmin) {
 Write-Host ''
 Write-Host '  [!!] WARNING: This will REMOVE hardening settings.' -ForegroundColor Yellow
 Write-Host '       Use only when the JSON backup is lost or unavailable.' -ForegroundColor Yellow
-Write-Host '       Prefer ZavetSecHardeningBaseline -Mode Rollback when possible.' -ForegroundColor DarkGray
+Write-Host '       Prefer ZavetSec-Harden -Mode Rollback when possible.' -ForegroundColor DarkGray
 Write-Host ''
 
 if ($NonInteractive) {
@@ -708,7 +708,7 @@ footer{
   <div class="header-right">
     <div class="brand">ZavetSec</div>
     <div>github.com/zavetsec</div>
-    <div>Companion to ZavetSecHardeningBaseline</div>
+    <div>Companion to ZavetSec-Harden</div>
   </div>
 </header>
 
@@ -757,7 +757,7 @@ footer{
         </div>
         <div class="step">
           <span class="step-num">03</span>
-          <span class="step-text">Re-run <span class="hl">ZavetSecHardeningBaseline -Mode Audit</span> to confirm state</span>
+          <span class="step-text">Re-run <span class="hl">ZavetSec-Harden -Mode Audit</span> to confirm state</span>
         </div>
         <div class="step">
           <span class="step-num">04</span>

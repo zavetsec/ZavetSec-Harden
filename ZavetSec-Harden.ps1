@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    ZavetSecHardeningBaseline - Windows security hardening baseline by ZavetSec.
+    ZavetSec-Harden - Windows security hardening baseline by ZavetSec.
 .DESCRIPTION
     Applies and audits Windows security hardening settings:
 
@@ -54,7 +54,18 @@
     'Rollback' - Revert changes made by a previous Apply (reads backup)
 .PARAMETER BackupPath
     Path for settings backup JSON (used by Apply and Rollback).
-    Default = Desktop\HardeningBackup_<timestamp>.json
+    Default = <ScriptDir>\HardeningBackup_<timestamp>.json  (same folder as the script)
+.PARAMETER DeviceProfile
+    Safe apply preset for a specific device role. Sets Skip* flags automatically.
+    Workstation       - Apply everything (safest, recommended for endpoints)
+    FileServer        - Skip CredentialProtection (Credential Guard)
+    DomainController  - Skip CredentialProtection + AuditPolicy (manage audit via GPO)
+    RDS               - Apply everything (note PS transcription volume on busy servers)
+    SQL               - Skip CredentialProtection
+    Exchange          - Skip Network + CredentialProtection (Exchange NTLM/SMB deps)
+    PrintServer       - Skip CredentialProtection; Print Spooler never disabled
+    All               - Apply ALL 60 checks incl. Credential Guard + Spooler disable
+    Custom            - Use manual -Skip* flags (default, legacy behaviour)
 .PARAMETER OutputPath
     HTML report path. Default = ScriptDir\ZavetSecHardening_<timestamp>.html
 .PARAMETER SkipAuditPolicy
@@ -69,24 +80,30 @@
     Also disable Print Spooler service (only on non-print-servers).
 .EXAMPLE
     # Audit only - see current state:
-    .\ZavetSecHardeningBaseline.ps1 -Mode Audit
+    .\ZavetSec-Harden.ps1 -Mode Audit
 
     # Apply all hardening:
-    .\ZavetSecHardeningBaseline.ps1 -Mode Apply
+    .\ZavetSec-Harden.ps1 -Mode Apply
 
     # Apply with custom backup:
-    .\ZavetSecHardeningBaseline.ps1 -Mode Apply -BackupPath C:\DFIR\backup.json
+    .\ZavetSec-Harden.ps1 -Mode Apply -BackupPath C:\DFIR\backup.json
 
     # Rollback:
-    .\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath C:\DFIR\backup.json
+    .\ZavetSec-Harden.ps1 -Mode Rollback -BackupPath C:\DFIR\backup.json
+
+    # Apply with device profile (interactive menu if profile omitted in Apply mode):
+    .\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile Workstation
+    .\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile DomainController
+    .\ZavetSec-Harden.ps1 -Mode Apply -DeviceProfile All
+    .\ZavetSec-Harden.ps1 -Mode Apply  # shows interactive profile menu
 
     # Partial apply (skip audit policy):
-    .\ZavetSecHardeningBaseline.ps1 -Mode Apply -SkipAuditPolicy
+    .\ZavetSec-Harden.ps1 -Mode Apply -SkipAuditPolicy
 .NOTES
     ================================================================
     ZavetSec | https://github.com/zavetsec
-    Script   : ZavetSecHardeningBaseline
-    Version  : 1.1
+    Script   : ZavetSec-Harden
+    Version  : 1.2
     Author   : ZavetSec
     License  : MIT
     ================================================================
@@ -100,10 +117,14 @@
 
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [ValidateSet('Audit','Apply','Rollback')]
-    [string]$Mode                      = 'Audit',
+    [ValidateSet('Audit','Apply','Rollback','Defaults','')]
+    [string]$Mode                      = '',
     [string]$BackupPath                = '',
     [string]$OutputPath                = '',
+    # Device profile -- sets safe Skip flags automatically.
+    # 'Custom' = manual flags below. 'All' = apply everything.
+    [ValidateSet('Workstation','FileServer','DomainController','RDS','SQL','Exchange','PrintServer','All','Custom')]
+    [string]$DeviceProfile             = 'Custom',
     [switch]$SkipAuditPolicy,
     [switch]$SkipNetworkHardening,
     [switch]$SkipPowerShell,
@@ -121,9 +142,10 @@ $global:Backup    = [ordered]@{}
 $global:Applied   = 0
 $global:Skipped   = 0
 $global:Failed    = 0
-$isApply          = $Mode -eq 'Apply'
-$isAudit          = $Mode -eq 'Audit'
-$isRollback       = $Mode -eq 'Rollback'
+# is* flags initialized to $false -- resolved after interactive menu (below banner)
+$isApply    = $false
+$isAudit    = $false
+$isRollback = $false
 
 # Resolve default paths here (not in param block - avoids PS expression parsing issues)
 $_stamp = $global:StartTime.ToString('yyyyMMdd_HHmmss')
@@ -221,8 +243,7 @@ function Test-And-Set {
     }
 
     # --- POST-APPLY RE-CHECK ---
-    # Обновляем $compliant актуальным состоянием после применения,
-    # чтобы отчёт отражал результат Apply, а не состояние до него.
+    # Re-check after apply so the report reflects the post-apply state.
     if ($isApply -and $applyStatus -notin @('', 'AlreadyCompliant')) {
         try {
             $compliant = & $CheckScript
@@ -271,20 +292,63 @@ function Backup-RegValue {
 }
 
 # -------------------------------------------------------
-# ROLLBACK MODE
+# ROLLBACK MODE  (runs after flag resolution below)
 # -------------------------------------------------------
-if ($isRollback) {
+function Invoke-Rollback {
+    param([string]$BackupPath, [switch]$NonInteractive)
+
     Write-Phase "ROLLBACK MODE"
-    if (-not (Test-Path $BackupPath)) {
-        Write-Err "Backup file not found: $BackupPath"
-        Write-Host "  Specify correct path: -BackupPath C:\path\to\backup.json" -ForegroundColor Yellow
+
+    # If no backup specified or path invalid -- offer interactive selection
+    if ([string]::IsNullOrEmpty($BackupPath) -or -not (Test-Path $BackupPath)) {
         if (-not $NonInteractive) {
-            Write-Host ""
-            Write-Host "  Press ENTER to exit..." -ForegroundColor DarkGray
-            $null = [Console]::ReadLine()
+            $backupFiles = @(Get-ChildItem -Path $PSScriptRoot -Filter 'HardeningBackup_*.json' -File |
+                             Sort-Object LastWriteTime -Descending)
+            if ($backupFiles.Count -eq 0) {
+                Write-Err "No backup files found in: $PSScriptRoot"
+                Write-Host "  Run Apply first to create a backup." -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "  Press ENTER to exit..." -ForegroundColor DarkGray
+                $null = [Console]::ReadLine()
+                exit 1
+            }
+            $selected = $false
+            while (-not $selected) {
+                $sep = "  " + ("=" * 62)
+                Write-Host ""
+                Write-Host $sep -ForegroundColor DarkCyan
+                Write-Host "    Select backup file to restore:" -ForegroundColor Cyan
+                Write-Host $sep -ForegroundColor DarkCyan
+                Write-Host ""
+                for ($i = 0; $i -lt $backupFiles.Count; $i++) {
+                    $f    = $backupFiles[$i]
+                    $age  = $f.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+                    $size = [math]::Round($f.Length / 1KB, 1)
+                    Write-Host ("    [{0,2}]  {1}  [{2}]  {3} KB" -f ($i + 1), $f.Name, $age, $size) -ForegroundColor Gray
+                }
+                Write-Host ""
+                Write-Host "    [0]   Back" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host $sep -ForegroundColor DarkCyan
+                Write-Host ""
+                $sel = [Console]::ReadLine()
+                if ($sel.Trim() -eq '0') { return $false }   # signal caller to go back
+                $selIdx = 0
+                if ([int]::TryParse($sel.Trim(), [ref]$selIdx) -and $selIdx -ge 1 -and $selIdx -le $backupFiles.Count) {
+                    $BackupPath = $backupFiles[$selIdx - 1].FullName
+                    Write-Info "Selected: $BackupPath"
+                    $selected = $true
+                } else {
+                    Write-Host "  Invalid selection, try again." -ForegroundColor Yellow
+                }
+            }
+        } else {
+            Write-Err "Backup file not found: $BackupPath"
+            Write-Host "  Specify: -BackupPath C:\path\to\backup.json" -ForegroundColor Yellow
+            exit 1
         }
-        exit 1
     }
+
     $bkData  = Get-Content $BackupPath -Raw | ConvertFrom-Json
     $bkCount = 0
     $bkFail  = 0
@@ -356,12 +420,9 @@ if ($isRollback) {
                 $bkCount++; continue
             }
 
-            # Composite entries (NET-005/006 .Req/.Enable, CRED-006 .Srv/.Cli, etc)
-            # Must check AFTER standard single-key check to avoid false matches.
-            # Null-safe: only inspect sub-properties if $bkv itself is an object.
+            # Composite entries (NET-005/006, CRED-006, etc)
             $isComposite = $false
             if ($bkv -is [System.Management.Automation.PSCustomObject]) {
-                # Standard single Backup-RegValue: has .Existed directly on $bkv — handle first
                 if ($null -ne $bkv.PSObject.Properties['Existed']) {
                     if ($bkv.Existed -eq $false) {
                         Remove-ItemProperty -Path $bkv.Path -Name $bkv.Name -EA SilentlyContinue
@@ -373,8 +434,6 @@ if ($isRollback) {
                     }
                     $bkCount++; continue
                 }
-
-                # Composite: sub-keys each containing their own Backup-RegValue object
                 $subEntries = @($bkv.PSObject.Properties | Where-Object {
                     $_.Value -ne $null -and
                     $_.Value -is [System.Management.Automation.PSCustomObject] -and
@@ -416,8 +475,9 @@ if ($isRollback) {
         Write-Host "  Press ENTER to exit..." -ForegroundColor DarkGray
         $null = [Console]::ReadLine()
     }
-    exit 0
+    return $true
 }
+
 # -------------------------------------------------------
 # BANNER
 # -------------------------------------------------------
@@ -427,7 +487,7 @@ Write-Host '    |_  /__ ___ _____ ___ | |_ / __/__ ___     ' -ForegroundColor Cy
 Write-Host '     / // _` \ V / -_)  _||  _\__ \/ -_) _|    ' -ForegroundColor Cyan
 Write-Host '    /___\__,_|\_/\___\__| |_| |___/\___\__|    ' -ForegroundColor DarkCyan
 Write-Host ''
-Write-Host '    Windows Security Hardening Baseline v1.0    ' -ForegroundColor White
+Write-Host '    Windows Security Hardening Baseline v1.2    ' -ForegroundColor White
 Write-Host '    CIS Benchmark | DISA STIG | MS Security Baseline' -ForegroundColor DarkGray
 Write-Host '    https://github.com/zavetsec                 ' -ForegroundColor DarkGray
 Write-Host ''
@@ -436,8 +496,8 @@ Write-Host ''
 # ADMIN CHECK
 # -------------------------------------------------------
 Write-Host "  ============================================================" -ForegroundColor DarkCyan
-Write-Host "    Script : ZavetSecHardeningBaseline v1.0" -ForegroundColor Cyan
-Write-Host "    Mode   : $Mode" -ForegroundColor $(if ($isApply) { 'Yellow' } else { 'Gray' })
+Write-Host "    Script : ZavetSec-Harden v1.2" -ForegroundColor Cyan
+Write-Host "    Mode   : $(if ($Mode) { $Mode } else { '(interactive)' })" -ForegroundColor Gray
 Write-Host "    Host   : $env:COMPUTERNAME" -ForegroundColor Gray
 Write-Host "    Time   : $($global:StartTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
 Write-Host "  ============================================================" -ForegroundColor DarkCyan
@@ -482,6 +542,518 @@ if ($isApply) {
 }
 
 # ===========================================================
+# MAIN MENU -- shown when no -Mode flag is given
+# ===========================================================
+if ($Mode -eq '' -and -not $NonInteractive) {
+    # Loop until valid selection
+    $modeSelected = $false
+    while (-not $modeSelected) {
+        $sep = "  " + ("=" * 62)
+        Write-Host ""
+        Write-Host $sep -ForegroundColor DarkCyan
+        Write-Host "    Select operation mode:" -ForegroundColor Cyan
+        Write-Host $sep -ForegroundColor DarkCyan
+        Write-Host ""
+        Write-Host "    [1]  Audit    " -NoNewline -ForegroundColor White
+        Write-Host "- Check current state, no changes made" -ForegroundColor DarkGray
+        Write-Host "    [2]  Apply    " -NoNewline -ForegroundColor Yellow
+        Write-Host "- Harden the system (backup created first)" -ForegroundColor DarkGray
+        Write-Host "    [3]  Rollback " -NoNewline -ForegroundColor Magenta
+        Write-Host "- Revert to pre-hardening state from backup" -ForegroundColor DarkGray
+        Write-Host "    [4]  Defaults " -NoNewline -ForegroundColor DarkYellow
+        Write-Host "- Reset all settings to Windows out-of-box defaults" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "    [0]  Exit" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host $sep -ForegroundColor DarkCyan
+        Write-Host ""
+        $modeChoice = [Console]::ReadLine()
+        switch ($modeChoice.Trim()) {
+            '1' { $Mode = 'Audit';    $modeSelected = $true }
+            '2' { $Mode = 'Apply';    $modeSelected = $true }
+            '3' { $Mode = 'Rollback'; $modeSelected = $true }
+            '4' { $Mode = 'Defaults'; $modeSelected = $true }
+            '0' { Write-Host "  Exiting." -ForegroundColor DarkGray; exit 0 }
+            default {
+                Write-Host "  Invalid choice, try again." -ForegroundColor Yellow
+            }
+        }
+    }
+} elseif ($Mode -eq '') {
+    # NonInteractive with no Mode -- default to Audit
+    $Mode = 'Audit'
+}
+
+# Add Defaults to isRollback area -- will be handled after flag resolution
+
+# Resolve mode flags now that Mode is known
+$isApply    = $Mode -eq 'Apply'
+$isAudit    = $Mode -eq 'Audit'
+$isRollback = $Mode -eq 'Rollback'
+$isDefaults = $Mode -eq 'Defaults'
+
+# ── Update console header with resolved mode
+Write-Host "  ============================================================" -ForegroundColor DarkCyan
+Write-Host "    Mode   : $Mode" -ForegroundColor $(if ($isApply) { 'Yellow' } elseif ($isRollback) { 'Magenta' } elseif ($isDefaults) { 'DarkYellow' } else { 'Cyan' })
+Write-Host "  ============================================================" -ForegroundColor DarkCyan
+Write-Host ""
+
+# ── Handle Rollback mode ──────────────────────────────────────────────────────
+if ($isRollback) {
+    $result = Invoke-Rollback -BackupPath $BackupPath -NonInteractive:$NonInteractive
+    if ($result -eq $false) {
+        # User pressed Back from backup selection -- restart from main menu
+        # Re-enter mode loop
+        $modeSelected = $false
+        while (-not $modeSelected) {
+            $sep = "  " + ("=" * 62)
+            Write-Host ""
+            Write-Host $sep -ForegroundColor DarkCyan
+            Write-Host "    Select operation mode:" -ForegroundColor Cyan
+            Write-Host $sep -ForegroundColor DarkCyan
+            Write-Host ""
+            Write-Host "    [1]  Audit    " -NoNewline -ForegroundColor White
+            Write-Host "- Check current state, no changes made" -ForegroundColor DarkGray
+            Write-Host "    [2]  Apply    " -NoNewline -ForegroundColor Yellow
+            Write-Host "- Harden the system (backup created first)" -ForegroundColor DarkGray
+            Write-Host "    [3]  Rollback " -NoNewline -ForegroundColor Magenta
+            Write-Host "- Revert to pre-hardening state from backup" -ForegroundColor DarkGray
+            Write-Host "    [4]  Defaults " -NoNewline -ForegroundColor DarkYellow
+            Write-Host "- Reset all settings to Windows out-of-box defaults" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "    [0]  Exit" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host $sep -ForegroundColor DarkCyan
+            Write-Host ""
+            $modeChoice = [Console]::ReadLine()
+            switch ($modeChoice.Trim()) {
+                '1' { $Mode = 'Audit';    $isAudit = $true;  $isApply = $false; $isRollback = $false; $isDefaults = $false; $modeSelected = $true }
+                '2' { $Mode = 'Apply';    $isApply = $true;  $isAudit = $false; $isRollback = $false; $isDefaults = $false; $modeSelected = $true }
+                '3' {
+                    $Mode = 'Rollback'; $isRollback = $true; $isApply = $false; $isAudit = $false; $isDefaults = $false
+                    $result = Invoke-Rollback -BackupPath '' -NonInteractive:$NonInteractive
+                    if ($result -ne $false) { exit 0 }
+                    # else loop again
+                }
+                '4' { $Mode = 'Defaults'; $isDefaults = $true; $isApply = $false; $isAudit = $false; $isRollback = $false; $modeSelected = $true }
+                '0' { Write-Host "  Exiting." -ForegroundColor DarkGray; exit 0 }
+                default { Write-Host "  Invalid choice, try again." -ForegroundColor Yellow }
+            }
+        }
+    } else {
+        exit 0
+    }
+}
+
+# ── Handle Defaults mode ──────────────────────────────────────────────────────
+if ($isDefaults) {
+    $defaultsScript = Join-Path $PSScriptRoot 'ZavetSecWindowsDefaults.ps1'
+    if (-not (Test-Path $defaultsScript)) {
+        Write-Err "ZavetSecWindowsDefaults.ps1 not found in: $PSScriptRoot"
+        Write-Host "  Place ZavetSecWindowsDefaults.ps1 in the same folder as this script." -ForegroundColor Yellow
+        Write-Host ""
+        if (-not $NonInteractive) {
+            Write-Host "  Press ENTER to exit..." -ForegroundColor DarkGray
+            $null = [Console]::ReadLine()
+        }
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "  [!!] Windows Defaults mode selected." -ForegroundColor DarkYellow
+    Write-Host "       This will reset ALL hardening settings to Windows out-of-box defaults." -ForegroundColor DarkGray
+    Write-Host "       Use only when a backup is unavailable or hardening was applied externally." -ForegroundColor DarkGray
+    Write-Host ""
+    if (-not $NonInteractive) {
+        Write-Host "  Type YES to confirm: " -ForegroundColor Yellow -NoNewline
+        $confirm = [Console]::ReadLine()
+        if ($confirm -ne 'YES') {
+            Write-Host "  Cancelled." -ForegroundColor DarkGray
+            exit 0
+        }
+    }
+    if ($NonInteractive) {
+        & $defaultsScript -NonInteractive
+    } else {
+        & $defaultsScript
+    }
+    exit 0
+}
+
+# ===========================================================
+# DEVICE PROFILE SELECTION
+# ===========================================================
+# Each profile sets Skip* flags that are unsafe for that device type.
+# 'All'    = nothing skipped, apply everything (operator responsibility).
+# 'Custom' = use -Skip* flags passed on command line (default).
+# ---------------------------------------------------------------
+
+function Show-ProfileMenu {
+    $sep = "  " + ("=" * 62)
+    Write-Host ""
+    Write-Host $sep -ForegroundColor DarkCyan
+    Write-Host "    Select device profile:" -ForegroundColor Cyan
+    Write-Host $sep -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "    [1]  Workstation       " -NoNewline -ForegroundColor White
+    Write-Host "- endpoint, full hardening applied" -ForegroundColor DarkGray
+    Write-Host "    [2]  File Server       " -NoNewline -ForegroundColor White
+    Write-Host "- SMBv1/signing critical, skip Credential Guard" -ForegroundColor DarkGray
+    Write-Host "    [3]  Domain Controller " -NoNewline -ForegroundColor White
+    Write-Host "- skip Credential Guard + audit policy (use GPO)" -ForegroundColor DarkGray
+    Write-Host "    [4]  RDS               " -NoNewline -ForegroundColor White
+    Write-Host "- terminal server, full hardening + transcription note" -ForegroundColor DarkGray
+    Write-Host "    [5]  SQL / DB Server   " -NoNewline -ForegroundColor White
+    Write-Host "- skip Credential Guard, check Remote Registry" -ForegroundColor DarkGray
+    Write-Host "    [6]  Exchange / Mail   " -NoNewline -ForegroundColor White
+    Write-Host "- skip network + credential sections (NTLM/SMB deps)" -ForegroundColor DarkGray
+    Write-Host "    [7]  Print Server      " -NoNewline -ForegroundColor White
+    Write-Host "- Print Spooler preserved, skip Credential Guard" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "    [8]  ALL               " -NoNewline -ForegroundColor Yellow
+    Write-Host "- apply all 60 checks, operator takes full responsibility" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "    [0]  Back              " -NoNewline -ForegroundColor DarkGray
+    Write-Host "- return to mode selection" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host $sep -ForegroundColor DarkCyan
+    Write-Host ""
+}
+
+function Show-ProfileSummary {
+    param(
+        [string]   $ProfileName,
+        [string[]] $Applied,
+        [string[]] $Skipped,
+        [string]   $Notes
+    )
+    $sep = "  " + ("-" * 62)
+    Write-Host ""
+    Write-Host "  Profile : " -NoNewline -ForegroundColor DarkGray
+    Write-Host $ProfileName -ForegroundColor Cyan
+    Write-Host $sep -ForegroundColor DarkGray
+    foreach ($item in $Applied) {
+        Write-Host "  [APPLY]  $item" -ForegroundColor Green
+    }
+    foreach ($item in $Skipped) {
+        Write-Host "  [SKIP ]  $item" -ForegroundColor Yellow
+    }
+    if ($Notes) {
+        Write-Host $sep -ForegroundColor DarkGray
+        Write-Host "  NOTE: $Notes" -ForegroundColor DarkGray
+    }
+    Write-Host $sep -ForegroundColor DarkGray
+    Write-Host ""
+}
+
+# ---------------------------------------------------------------
+# Show interactive menu when Mode=Apply and no profile specified
+# ---------------------------------------------------------------
+if ($isApply -and $DeviceProfile -eq 'Custom' -and -not $NonInteractive) {
+    $profileSelected = $false
+    while (-not $profileSelected) {
+        Show-ProfileMenu
+        $profileChoice = [Console]::ReadLine()
+        switch ($profileChoice.Trim()) {
+            '1' { $DeviceProfile = 'Workstation';     $profileSelected = $true }
+            '2' { $DeviceProfile = 'FileServer';      $profileSelected = $true }
+            '3' { $DeviceProfile = 'DomainController'; $profileSelected = $true }
+            '4' { $DeviceProfile = 'RDS';             $profileSelected = $true }
+            '5' { $DeviceProfile = 'SQL';             $profileSelected = $true }
+            '6' { $DeviceProfile = 'Exchange';        $profileSelected = $true }
+            '7' { $DeviceProfile = 'PrintServer';     $profileSelected = $true }
+            '8' { $DeviceProfile = 'All';             $profileSelected = $true }
+            '0' {
+                # Back -- re-run mode selection
+                Write-Host "  Going back to mode selection..." -ForegroundColor DarkGray
+                $modeSelected = $false
+                while (-not $modeSelected) {
+                    $sep = "  " + ("=" * 62)
+                    Write-Host ""
+                    Write-Host $sep -ForegroundColor DarkCyan
+                    Write-Host "    Select operation mode:" -ForegroundColor Cyan
+                    Write-Host $sep -ForegroundColor DarkCyan
+                    Write-Host ""
+                    Write-Host "    [1]  Audit    " -NoNewline -ForegroundColor White
+                    Write-Host "- Check current state, no changes made" -ForegroundColor DarkGray
+                    Write-Host "    [2]  Apply    " -NoNewline -ForegroundColor Yellow
+                    Write-Host "- Harden the system (backup created first)" -ForegroundColor DarkGray
+                    Write-Host "    [3]  Rollback " -NoNewline -ForegroundColor Magenta
+                    Write-Host "- Revert to pre-hardening state from backup" -ForegroundColor DarkGray
+                    Write-Host ""
+                    Write-Host "    [0]  Exit" -ForegroundColor DarkGray
+                    Write-Host ""
+                    Write-Host $sep -ForegroundColor DarkCyan
+                    Write-Host ""
+                    $modeChoice = [Console]::ReadLine()
+                    switch ($modeChoice.Trim()) {
+                        '1' {
+                            $Mode = 'Audit'
+                            $isApply = $false; $isAudit = $true; $isRollback = $false
+                            $profileSelected = $true; $modeSelected = $true
+                        }
+                        '2' {
+                            $Mode = 'Apply'
+                            $isApply = $true; $isAudit = $false; $isRollback = $false
+                            $modeSelected = $true
+                            # stays in profile loop
+                        }
+                        '3' {
+                            $Mode = 'Rollback'
+                            $isApply = $false; $isAudit = $false; $isRollback = $true
+                            $profileSelected = $true; $modeSelected = $true
+                        }
+                        '0' { Write-Host "  Exiting." -ForegroundColor DarkGray; exit 0 }
+                        default { Write-Host "  Invalid choice, try again." -ForegroundColor Yellow }
+                    }
+                }
+            }
+            default {
+                Write-Host "  Invalid choice, try again." -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------
+# Apply profile -- configure Skip* flags for selected device role
+# ---------------------------------------------------------------
+switch ($DeviceProfile) {
+
+    'Workstation' {
+        $a = @(
+            'Network Hardening    (NET-001..010)',
+            'Credential Protection (CRED-001..006) incl. Credential Guard',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010)'
+        )
+        Show-ProfileSummary 'Workstation' $a @() ''
+    }
+
+    'FileServer' {
+        $SkipCredentialProtection = $true
+        $a = @(
+            'Network Hardening    (NET-001..010) -- SMBv1 off, signing required',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010)'
+        )
+        $s = @(
+            'Credential Protection (CRED-001..006) -- Credential Guard unstable on some storage HW'
+        )
+        Show-ProfileSummary 'FileServer' $a $s 'Before Apply: Get-SmbSession | Where-Object Dialect -eq 1.0'
+    }
+
+    'DomainController' {
+        $SkipCredentialProtection = $true
+        $SkipAuditPolicy          = $true
+        $a = @(
+            'Network Hardening    (NET-001..010)',
+            'PowerShell Hardening (PS-001..005)',
+            'System Hardening     (SYS-001..010)'
+        )
+        $s = @(
+            'Credential Protection -- Credential Guard not supported on DC (Microsoft KB)',
+            'Audit Policy          -- manage via Default Domain Controllers Policy (GPO)'
+        )
+        Show-ProfileSummary 'DomainController' $a $s 'Manage audit via GPO; align with AUD-029 (SCENoApplyLegacyAuditPolicy)'
+    }
+
+    'RDS' {
+        $a = @(
+            'Network Hardening    (NET-001..010)',
+            'Credential Protection (CRED-001..006)',
+            'PowerShell Hardening (PS-001..005) -- transcription enabled',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010)'
+        )
+        Show-ProfileSummary 'RDS' $a @() 'PS-003: on busy RDS C:\ProgramData\PSTranscripts grows fast -- configure rotation'
+    }
+
+    'SQL' {
+        $SkipCredentialProtection = $true
+        $a = @(
+            'Network Hardening    (NET-001..010)',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010)'
+        )
+        $s = @(
+            'Credential Protection -- Credential Guard unsupported on SQL Server (some configs)'
+        )
+        Show-ProfileSummary 'SQL' $a $s 'Check NET-010 (Remote Registry): some SQL monitoring tools rely on it'
+    }
+
+    'Exchange' {
+        $SkipNetworkHardening     = $true
+        $SkipCredentialProtection = $true
+        $a = @(
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010)'
+        )
+        $s = @(
+            'Network Hardening    -- Exchange depends on specific NTLM/SMB settings',
+            'Credential Protection -- Credential Guard incompatible with Exchange'
+        )
+        Show-ProfileSummary 'Exchange' $a $s 'Recommended: run Audit first, then apply sections manually'
+    }
+
+    'PrintServer' {
+        $SkipCredentialProtection  = $true
+        $EnablePrintSpoolerDisable = $false
+        $a = @(
+            'Network Hardening    (NET-001..010)',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010) -- Print Spooler PRESERVED'
+        )
+        $s = @(
+            'Credential Protection          -- skipped',
+            'SYS-008 Print Spooler Disable  -- forced OFF (this is a print server)'
+        )
+        Show-ProfileSummary 'PrintServer' $a $s ''
+    }
+
+    'All' {
+        $SkipAuditPolicy           = $false
+        $SkipNetworkHardening      = $false
+        $SkipPowerShell            = $false
+        $SkipCredentialProtection  = $false
+        $EnablePrintSpoolerDisable = $true
+        $a = @(
+            'Network Hardening    (NET-001..010)',
+            'Credential Protection (CRED-001..006) incl. Credential Guard',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy         (AUD-001..029)',
+            'System Hardening     (SYS-001..010) + Print Spooler DISABLED'
+        )
+        Show-ProfileSummary 'ALL' $a @() 'WARNING: applies all 60 checks incl. Credential Guard and Print Spooler disable'
+        Write-Host "  [!!] Profile ALL selected. Press ENTER to confirm or Ctrl+C to abort." -ForegroundColor Red
+        $null = [Console]::ReadLine()
+    }
+
+    'Custom' {
+        Write-Info 'Profile: Custom (manual -Skip* flags)'
+    }
+}
+
+# ── Active flags summary ──────────────────────────────────────────────────────
+if ($isApply -and $DeviceProfile -ne 'Custom') {
+    Write-Host "  Active flags:" -ForegroundColor DarkGray
+    Write-Host "    SkipNetwork     : $SkipNetworkHardening"     -ForegroundColor $(if ($SkipNetworkHardening)     { 'Yellow' } else { 'DarkGray' })
+    Write-Host "    SkipCredentials : $SkipCredentialProtection"  -ForegroundColor $(if ($SkipCredentialProtection)  { 'Yellow' } else { 'DarkGray' })
+    Write-Host "    SkipPowerShell  : $SkipPowerShell"           -ForegroundColor $(if ($SkipPowerShell)           { 'Yellow' } else { 'DarkGray' })
+    Write-Host "    SkipAuditPolicy : $SkipAuditPolicy"          -ForegroundColor $(if ($SkipAuditPolicy)          { 'Yellow' } else { 'DarkGray' })
+    Write-Host "    DisableSpooler  : $EnablePrintSpoolerDisable"  -ForegroundColor $(if ($EnablePrintSpoolerDisable)  { 'Cyan'   } else { 'DarkGray' })
+    Write-Host ""
+}
+
+# ── Build profile summary strings for HTML report ────────────────────────────
+# Describes which sections were applied/skipped and why.
+# Used in the HTML report section 02.5 (Device Profile Summary).
+$global:ProfileApplied = [System.Collections.Generic.List[string]]::new()
+$global:ProfileSkipped = [System.Collections.Generic.List[string]]::new()
+$global:ProfileNote    = ''
+
+switch ($DeviceProfile) {
+    'Workstation' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010)',
+            'Credential Protection (CRED-001..006) including Credential Guard',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010)'
+        ))
+        $global:ProfileNote = 'Full hardening applied. Safest profile for domain-joined and standalone workstations.'
+    }
+    'FileServer' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010) -- SMBv1 disabled, signing required',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010)'
+        ))
+        $global:ProfileSkipped.AddRange([string[]]@(
+            'Credential Protection (CRED-001..006) -- Credential Guard can cause instability on some storage hardware configurations'
+        ))
+        $global:ProfileNote = 'Verify no SMBv1 clients before applying: Get-SmbSession | Where-Object Dialect -eq 1.0'
+    }
+    'DomainController' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010)',
+            'PowerShell Hardening (PS-001..005)',
+            'System Hardening (SYS-001..010)'
+        ))
+        $global:ProfileSkipped.AddRange([string[]]@(
+            'Credential Protection (CRED-001..006) -- Credential Guard is not supported on Domain Controllers per Microsoft documentation',
+            'Audit Policy (AUD-001..029) -- audit policy on DCs should be managed via Default Domain Controllers Policy (GPO) to prevent conflicts'
+        ))
+        $global:ProfileNote = 'Manage audit policy via GPO. Ensure AUD-029 (SCENoApplyLegacyAuditPolicy) is set in GPO to prevent subcategory override.'
+    }
+    'RDS' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010)',
+            'Credential Protection (CRED-001..006)',
+            'PowerShell Hardening (PS-001..005) -- transcription enabled',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010)'
+        ))
+        $global:ProfileNote = 'PS-003 (transcription): on busy RDS hosts C:\ProgramData\PSTranscripts grows rapidly with concurrent sessions. Configure log rotation or redirect to a network path via GPO.'
+    }
+    'SQL' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010)',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010)'
+        ))
+        $global:ProfileSkipped.AddRange([string[]]@(
+            'Credential Protection (CRED-001..006) -- Credential Guard is unsupported or problematic on SQL Server in certain hardware and version configurations'
+        ))
+        $global:ProfileNote = 'Verify NET-010 (Remote Registry): some SQL Server monitoring agents use Remote Registry for metrics collection.'
+    }
+    'Exchange' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010)'
+        ))
+        $global:ProfileSkipped.AddRange([string[]]@(
+            'Network Hardening (NET-001..010) -- Exchange Server has dependencies on specific NTLM and SMB configurations that SMB signing and NTLMv2-only settings can break',
+            'Credential Protection (CRED-001..006) -- Credential Guard is incompatible with Exchange Server transport and authentication stack'
+        ))
+        $global:ProfileNote = 'Exchange requires individual analysis before hardening. Run Audit first, review all FAIL items, then apply sections manually after validating each dependency.'
+    }
+    'PrintServer' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010)',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010) -- Print Spooler service preserved'
+        ))
+        $global:ProfileSkipped.AddRange([string[]]@(
+            'Credential Protection (CRED-001..006) -- skipped as a precaution on print server hardware',
+            'SYS-008 Print Spooler Disable -- forced OFF: this host is a print server'
+        ))
+        $global:ProfileNote = 'SYS-008 is never applied on this profile regardless of -EnablePrintSpoolerDisable flag.'
+    }
+    'All' {
+        $global:ProfileApplied.AddRange([string[]]@(
+            'Network Hardening (NET-001..010)',
+            'Credential Protection (CRED-001..006) including Credential Guard',
+            'PowerShell Hardening (PS-001..005)',
+            'Audit Policy (AUD-001..029)',
+            'System Hardening (SYS-001..010) + Print Spooler disabled'
+        ))
+        $global:ProfileNote = 'ALL profile: every check applied. Operator confirmed full responsibility. Review report for any Applied-NotVerified items that require reboot.'
+    }
+    default {
+        $global:ProfileNote = 'Custom profile: manual -Skip* flags used. See active flags in Coverage panel.'
+    }
+}
+
+
 # SECTION 1: NETWORK HARDENING
 # ===========================================================
 if (-not $SkipNetworkHardening) {
@@ -1358,7 +1930,9 @@ $lowFail  = [int]@($global:Checks | Where-Object { -not $_.Compliant -and $_.Sev
 
 $duration = ((Get-Date) - $global:StartTime).ToString("m'm 's's'")
 
-$riskColor = if ($critFail -gt 0) { '#ff2d55' } elseif ($highFail -gt 0) { '#ff6b00' } elseif ($medFail -gt 0) { '#ffd60a' } else { '#30d158' }
+$riskColor  = if ($critFail -gt 0) { '#ff2d55' } elseif ($highFail -gt 0) { '#ff6b00' } elseif ($medFail -gt 0) { '#ffd60a' } else { '#30d158' }
+# Gauge ring color based purely on compliance percentage
+$gaugeColor = if ($compliancePct -ge 80) { '#00ff88' } elseif ($compliancePct -ge 60) { '#ff6b00' } else { '#ff2d55' }
 
 # Pre-calculate gauge arc length (circumference = 2*pi*r = 2*3.14159*15.9155 = ~100)
 $gaugeArc  = $compliancePct   # out of 100 = percentage of full circle
@@ -1406,6 +1980,38 @@ $tableRows = @(foreach ($c in ($global:Checks | Sort-Object @{e={if ($_.Complian
 
 $modeColor = switch ($Mode) { 'Apply' { '#ff6b00' } 'Rollback' { '#a78bfa' } default { '#00d4ff' } }
 
+# ── Pre-build profile summary HTML rows for the report ───────────────────────
+$profileAppliedRows = ($global:ProfileApplied | ForEach-Object {
+    "<tr><td style='width:16px;padding:8px 10px'><span style='color:#00ff88;font-family:JetBrains Mono,monospace;font-size:11px'>+</span></td>" +
+    "<td style='padding:8px 12px;font-family:JetBrains Mono,monospace;font-size:11px;color:#c9d1d9'>$_</td></tr>"
+}) -join ""
+
+$profileSkippedRows = ($global:ProfileSkipped | ForEach-Object {
+    "<tr><td style='width:16px;padding:8px 10px'><span style='color:#ff6b00;font-family:JetBrains Mono,monospace;font-size:11px'>-</span></td>" +
+    "<td style='padding:8px 12px;font-family:JetBrains Mono,monospace;font-size:11px;color:#8b949e'>$_</td></tr>"
+}) -join ""
+
+$profileSectionHtml = if ($DeviceProfile -ne 'Custom') {
+    $skippedBlock = if ($global:ProfileSkipped.Count -gt 0) {
+        "<div style='margin-top:14px'>" +
+        "<div style='font-family:JetBrains Mono,monospace;font-size:9px;color:#ff6b00;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px'>Skipped sections</div>" +
+        "<table style='width:100%;border-collapse:collapse'>$profileSkippedRows</table></div>"
+    } else { "" }
+
+    $noteBlock = if ($global:ProfileNote) {
+        "<div style='margin-top:14px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.15);border-radius:5px;padding:10px 14px;" +
+        "font-family:JetBrains Mono,monospace;font-size:11px;color:#8b949e;line-height:1.7'>" +
+        "<span style='color:#58a6ff;font-weight:700'>NOTE &nbsp;</span>$($global:ProfileNote)</div>"
+    } else { "" }
+
+    "<div class='sec-hdr'><span class='sec-num'>02.5</span> Device Profile Applied: <span style='color:#a5d6ff'>$DeviceProfile</span></div>" +
+    "<div class='panel'>" +
+    "<div class='panel-title'>Applied sections</div>" +
+    "<table style='width:100%;border-collapse:collapse'>$profileAppliedRows</table>" +
+    $skippedBlock + $noteBlock +
+    "</div>"
+} else { "" }
+
 # StrictMode disabled for here-string HTML generation to prevent false variable errors
 Set-StrictMode -Off
 
@@ -1414,7 +2020,7 @@ $html = @"
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ZavetSec Hardening Baseline // $env:COMPUTERNAME</title>
+<title>ZavetSec-Harden // $env:COMPUTERNAME</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1777,18 +2383,18 @@ footer{
   <!-- ── SCORE ── -->
   <div class="sec-hdr"><span class="sec-num">01</span> Compliance Overview</div>
 
-  <div class="score-panel" style="border-color:rgba($(if($compliancePct -ge 90){'0,255,136'}elseif($compliancePct -ge 60){'255,214,10'}else{'255,45,85'}),0.3)">
+  <div class="score-panel" style="border-color:rgba($(if($compliancePct -ge 80){'0,255,136'}elseif($compliancePct -ge 60){'255,107,0'}else{'255,45,85'}),0.3)">
     <div class="gauge">
       <svg viewBox="0 0 36 36" style="width:150px;height:150px;transform:rotate(-90deg)">
         <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#1c2128" stroke-width="3"/>
         <circle cx="18" cy="18" r="15.9155" fill="none" stroke-width="3"
-          style="stroke:$riskColor;stroke-dasharray:$gaugeArc $gaugeGap;stroke-linecap:round;filter:drop-shadow(0 0 4px $riskColor)"/>
+          style="stroke:$gaugeColor;stroke-dasharray:$gaugeArc $gaugeGap;stroke-linecap:round;filter:drop-shadow(0 0 6px $gaugeColor)"/>
       </svg>
-      <div class="gauge-pct" style="color:$riskColor">$compliancePct%<br><span class="gauge-sub">compliant</span></div>
+      <div class="gauge-pct" style="color:$gaugeColor">$compliancePct%<br><span class="gauge-sub">compliant</span></div>
     </div>
     <div class="score-info">
       <div class="score-label">Compliance Score</div>
-      <div class="score-big" style="color:$riskColor">$compliancePct<span style="font-size:24px;color:#8b949e">%</span></div>
+      <div class="score-big" style="color:$gaugeColor">$compliancePct<span style="font-size:24px;color:#8b949e">%</span></div>
       <div class="score-sub">$compliantCount of $totalChecks checks passed &nbsp;|&nbsp; Mode: $Mode</div>
     </div>
     <div style="flex:1"></div>
@@ -1831,11 +2437,14 @@ footer{
         <div>Audit Policy <span style="color:$(if($SkipAuditPolicy){'#ff6b00'}else{'#00ff88'})">$(if($SkipAuditPolicy){'[SKIPPED]'}else{'[OK]'})</span></div>
         <div>System Hardening <span style="color:#00ff88">[OK]</span></div>
         <div>Print Spooler Disable <span style="color:$(if($EnablePrintSpoolerDisable){'#00ff88'}else{'#8b949e'})">$(if($EnablePrintSpoolerDisable){'[ENABLED]'}else{'[OPT-IN]'})</span></div>
-        <div style="margin-top:10px;font-size:9px;color:#8b949e">Backup: $(if(Test-Path $BackupPath){"$BackupPath"}else{'N/A'})</div>
-        <div style="font-size:9px;color:#8b949e">Rollback: .\ZavetSecHardeningBaseline.ps1 -Mode Rollback -BackupPath &quot;...&quot;</div>
+        <div style="font-size:9px;color:#8b949e">Profile: <span style="color:#a5d6ff">$DeviceProfile</span></div>
+        <div style="margin-top:4px;font-size:9px;color:#8b949e">Backup: $(if(Test-Path $BackupPath){"$BackupPath"}else{'N/A'})</div>
+        <div style="font-size:9px;color:#8b949e">Rollback: .\ZavetSec-Harden.ps1 -Mode Rollback -BackupPath &quot;...&quot;</div>
       </div>
     </div>
   </div>
+
+  $profileSectionHtml
 
   <!-- ── CHECKS TABLE ── -->
   <div class="sec-hdr"><span class="sec-num">03</span> All Checks <span style="color:#8b949e;font-weight:400">($totalChecks)</span></div>
@@ -1871,7 +2480,7 @@ footer{
 
 <footer>
   <span style="color:#00ff88;font-weight:700;letter-spacing:2px">ZAVETSEC</span>
-  &nbsp;&bull;&nbsp; ZavetSecHardeningBaseline v1.1
+  &nbsp;&bull;&nbsp; ZavetSec-Harden v1.2
   &nbsp;&bull;&nbsp; github.com/zavetsec
   &nbsp;&bull;&nbsp; Host: $env:COMPUTERNAME
   &nbsp;&bull;&nbsp; Mode: $Mode
@@ -1921,12 +2530,15 @@ if ($_outDir -and -not (Test-Path $_outDir)) {
 
 # Save report
 try {
-    $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force -ErrorAction Stop
+    # Use UTF8NoBOM encoding -- PS5.1 Out-File UTF8 adds BOM which breaks browser rendering
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($OutputPath, $html, $utf8NoBom)
     Write-Host "  [OK] HTML report saved: $OutputPath" -ForegroundColor Green
 } catch {
     Write-Host "  [XX] Failed to save report: $($_.Exception.Message)" -ForegroundColor Red
     $OutputPath = Join-Path $env:TEMP "ZavetSecHardening_${env:COMPUTERNAME}_$_stamp.html"
-    $html | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($OutputPath, $html, $utf8NoBom)
     Write-Host "  [OK] Report saved to TEMP: $OutputPath" -ForegroundColor Yellow
 }
 
